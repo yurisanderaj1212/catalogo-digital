@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    unoptimized: true,
+  },
+  // Removemos la configuración de export estático para que funcione en Render
 };
 
 export default nextConfig;

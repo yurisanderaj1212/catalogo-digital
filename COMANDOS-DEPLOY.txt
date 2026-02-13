@@ -1,0 +1,137 @@
+===========================================
+COMANDOS PARA DEPLOY EN RENDER
+===========================================
+
+IMPORTANTE: Ejecuta estos comandos en orden desde la carpeta catalogo-digital
+
+===========================================
+PASO 1: VERIFICAR QUE TODO COMPILE
+===========================================
+
+npm run build
+
+(Si hay errores, corrígelos antes de continuar)
+
+===========================================
+PASO 2: INICIALIZAR GIT Y SUBIR A GITHUB
+===========================================
+
+# Inicializar repositorio
+git init
+
+# Agregar todos los archivos
+git add .
+
+# Hacer commit
+git commit -m "Initial commit: Catálogo digital completo"
+
+# Configurar rama principal
+git branch -M main
+
+# Conectar con GitHub (REEMPLAZA TU-USUARIO con tu usuario real)
+git remote add origin https://github.com/TU-USUARIO/catalogo-digital.git
+
+# Subir código
+git push -u origin main
+
+===========================================
+PASO 3: CONFIGURAR EN RENDER.COM
+===========================================
+
+1. Ve a: https://render.com
+2. Sign up with GitHub
+3. New + → Web Service
+4. Conectar repositorio: catalogo-digital
+
+CONFIGURACIÓN:
+--------------
+Name: catalogo-digital
+Region: Oregon (US West)
+Branch: main
+Root Directory: catalogo-digital
+Runtime: Node
+Build Command: npm install && npm run build
+Start Command: npm start
+Instance Type: Free
+
+VARIABLES DE ENTORNO:
+--------------------
+NEXT_PUBLIC_SUPABASE_URL = https://xmfvfhfizlgrcwylrtlg.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtZnZmaGZpemxncmN3eWxydGxnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NTcwMDQsImV4cCI6MjA4NjUzMzAwNH0.UXiLYJzroeJXJmDVPeXdt6jXU3n-fe4acdku9lXZppQ
+NODE_VERSION = 18.17.0
+
+5. Click "Create Web Service"
+6. Espera 5-10 minutos
+
+===========================================
+PASO 4: VERIFICAR
+===========================================
+
+Tu sitio estará en: https://catalogo-digital.onrender.com
+
+Prueba:
+- Catálogo público
+- Panel admin: /admin/login (admin / admin123)
+- Subir imágenes
+- Todas las funcionalidades
+
+===========================================
+ACTUALIZAR EL SITIO (después del deploy)
+===========================================
+
+# Cada vez que hagas cambios:
+
+git add .
+git commit -m "Descripción de los cambios"
+git push
+
+# Render hará redeploy automáticamente (5-10 min)
+
+===========================================
+EVITAR QUE EL SITIO SE DUERMA (OPCIONAL)
+===========================================
+
+1. Ve a: https://uptimerobot.com
+2. Crea cuenta gratis
+3. Add New Monitor:
+   - Type: HTTP(s)
+   - URL: https://tu-sitio.onrender.com
+   - Interval: 5 minutes
+4. Save
+
+Esto hará ping cada 5 minutos para mantener el sitio activo.
+
+===========================================
+SOLUCIÓN RÁPIDA DE PROBLEMAS
+===========================================
+
+Build falla:
+- Revisa logs en Render → Logs
+- Verifica que package.json esté correcto
+
+No se ven tiendas:
+- Ve a Supabase → Table Editor → tiendas
+- Verifica que haya tiendas con activa = true
+
+Error 403 al subir imágenes:
+- Ve a Supabase → Storage → imagenes
+- Verifica que sea público
+- Verifica políticas en Policies
+
+Sitio muy lento:
+- Es normal en plan gratuito
+- Usa UptimeRobot para evitar sleep
+- O upgrade a Render Starter ($7/mes)
+
+===========================================
+DOCUMENTACIÓN COMPLETA
+===========================================
+
+Lee estos archivos para más detalles:
+- DEPLOY-RENDER.md (Guía paso a paso completa)
+- politicas-supabase.sql (Script SQL para Supabase)
+- CHECKLIST-DEPLOY.md (Lista de verificación)
+
+===========================================
+¡LISTO! Tu catálogo estará en línea 🚀
+===========================================
