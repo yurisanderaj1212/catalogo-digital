@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, Categoria, Tienda } from '@/lib/supabase';
-import { Plus, Edit, Trash2, Tag, Store } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag, Store, Filter } from 'lucide-react';
 import ModalConfirmar from '../../components/ModalConfirmar';
 
 export default function CategoriasPage() {
   const [categorias, setCategorias] = useState<(Categoria & { tienda?: Tienda })[]>([]);
   const [tiendas, setTiendas] = useState<Tienda[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tiendaFiltro, setTiendaFiltro] = useState('');
   const [modalAbierto, setModalAbierto] = useState(false);
   const [categoriaEditar, setCategoriaEditar] = useState<Categoria | null>(null);
   const [formData, setFormData] = useState({
@@ -120,6 +121,11 @@ export default function CategoriasPage() {
     }
   };
 
+  const categoriasFiltradas = categorias.filter((categoria) => {
+    const matchTienda = !tiendaFiltro || categoria.tienda_id === tiendaFiltro;
+    return matchTienda;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -144,9 +150,28 @@ export default function CategoriasPage() {
         </button>
       </div>
 
-      {categorias.length > 0 ? (
+      {/* Filtro por tienda */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <select
+            value={tiendaFiltro}
+            onChange={(e) => setTiendaFiltro(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todas las tiendas</option>
+            {tiendas.map((tienda) => (
+              <option key={tienda.id} value={tienda.id}>
+                {tienda.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {categoriasFiltradas.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {categorias.map((categoria) => (
+          {categoriasFiltradas.map((categoria) => (
             <div
               key={categoria.id}
               className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
@@ -196,13 +221,17 @@ export default function CategoriasPage() {
       ) : (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <Tag className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 text-lg mb-4">No hay categorías registradas</p>
-          <button
-            onClick={abrirModalNuevo}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Crear primera categoría
-          </button>
+          <p className="text-gray-600 text-lg mb-4">
+            {tiendaFiltro ? 'No se encontraron categorías para esta tienda' : 'No hay categorías registradas'}
+          </p>
+          {!tiendaFiltro && (
+            <button
+              onClick={abrirModalNuevo}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Crear primera categoría
+            </button>
+          )}
         </div>
       )}
 

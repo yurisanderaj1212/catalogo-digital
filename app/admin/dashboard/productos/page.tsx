@@ -15,9 +15,11 @@ interface ProductoExtendido extends Producto {
 export default function ProductosPage() {
   const [productos, setProductos] = useState<ProductoExtendido[]>([]);
   const [tiendas, setTiendas] = useState<Tienda[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [tiendaFiltro, setTiendaFiltro] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [modalEliminar, setModalEliminar] = useState(false);
   const [productoEliminar, setProductoEliminar] = useState<{ id: string; nombre: string } | null>(null);
   const [eliminando, setEliminando] = useState(false);
@@ -28,6 +30,11 @@ export default function ProductosPage() {
     fetchData();
   }, []);
 
+  // Resetear filtro de categoría cuando cambia la tienda
+  useEffect(() => {
+    setCategoriaFiltro('');
+  }, [tiendaFiltro]);
+
   const fetchData = async () => {
     try {
       const [productosRes, tiendasRes, categoriasRes] = await Promise.all([
@@ -37,26 +44,33 @@ export default function ProductosPage() {
       ]);
 
       if (productosRes.data && tiendasRes.data && categoriasRes.data) {
-        const productosConRelaciones = await Promise.all(
-          productosRes.data.map(async (prod) => {
-            const { data: imagenes } = await supabase
-              .from('imagenes_producto')
-              .select('*')
-              .eq('producto_id', prod.id)
-              .order('orden')
-              .limit(1);
+        // OPTIMIZACIÓN: Cargar TODAS las imágenes en una sola consulta (batch)
+        const productosIds = productosRes.data.map(p => p.id);
+        const { data: todasImagenes } = await supabase
+          .from('imagenes_producto')
+          .select('*')
+          .in('producto_id', productosIds)
+          .order('orden');
 
-            return {
-              ...prod,
-              tienda: tiendasRes.data.find((t) => t.id === prod.tienda_id),
-              categoria: categoriasRes.data.find((c) => c.id === prod.categoria_id),
-              imagenes: imagenes || [],
-            };
-          })
-        );
+        // Crear un mapa de imágenes por producto (solo la primera)
+        const imagenesPorProducto = (todasImagenes || []).reduce((acc, img) => {
+          if (!acc[img.producto_id]) {
+            acc[img.producto_id] = [img]; // Solo guardar la primera imagen
+          }
+          return acc;
+        }, {} as Record<string, any[]>);
+
+        // Combinar datos sin hacer consultas adicionales
+        const productosConRelaciones = productosRes.data.map((prod) => ({
+          ...prod,
+          tienda: tiendasRes.data.find((t) => t.id === prod.tienda_id),
+          categoria: categoriasRes.data.find((c) => c.id === prod.categoria_id),
+          imagenes: imagenesPorProducto[prod.id] || [],
+        }));
 
         setProductos(productosConRelaciones);
         setTiendas(tiendasRes.data);
+        setCategorias(categoriasRes.data);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -68,8 +82,14 @@ export default function ProductosPage() {
   const productosFiltrados = productos.filter((producto) => {
     const matchBusqueda = producto.nombre.toLowerCase().includes(busqueda.toLowerCase());
     const matchTienda = !tiendaFiltro || producto.tienda_id === tiendaFiltro;
-    return matchBusqueda && matchTienda;
+    const matchCategoria = !categoriaFiltro || producto.categoria_id === categoriaFiltro;
+    return matchBusqueda && matchTienda && matchCategoria;
   });
+
+  // Filtrar categorías según la tienda seleccionada
+  const categoriasFiltradas = tiendaFiltro
+    ? categorias.filter((cat) => cat.tienda_id === tiendaFiltro)
+    : categorias;
 
   const toggleActivo = async (id: string, activo: boolean) => {
     try {
@@ -163,7 +183,7 @@ export default function ProductosPage() {
 
       {/* Filtros */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -189,6 +209,21 @@ export default function ProductosPage() {
               ))}
             </select>
           </div>
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <select
+              value={categoriaFiltro}
+              onChange={(e) => setCategoriaFiltro(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todas las categorías</option>
+              {categoriasFiltradas.map((categoria) => (
+                <option key={categoria.id} value={categoria.id}>
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -204,6 +239,7 @@ export default function ProductosPage() {
                   <img
                     src={producto.imagenes[0].url_imagen}
                     alt={producto.nombre}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -278,9 +314,9 @@ export default function ProductosPage() {
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-lg mb-4">
-            {busqueda || tiendaFiltro ? 'No se encontraron productos' : 'No hay productos registrados'}
+            {busqueda || tiendaFiltro || categoriaFiltro ? 'No se encontraron productos' : 'No hay productos registrados'}
           </p>
-          {!busqueda && !tiendaFiltro && (
+          {!busqueda && !tiendaFiltro && !categoriaFiltro && (
             <button
               onClick={abrirModalNuevo}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"

@@ -55,6 +55,24 @@ export default function TiendaPage() {
     }
   }, [tiendaId]);
 
+  // Scroll al inicio cuando cambia la categoría
+  useEffect(() => {
+    // Hacer scroll al inicio de los productos, considerando el header sticky
+    const headerElement = document.querySelector('header');
+    const mainElement = document.querySelector('main');
+    
+    if (headerElement && mainElement) {
+      const headerHeight = headerElement.offsetHeight;
+      const mainTop = mainElement.getBoundingClientRect().top + window.scrollY;
+      
+      // Scroll a la posición del main menos la altura del header (con un pequeño margen)
+      window.scrollTo({
+        top: mainTop - headerHeight - 10,
+        behavior: 'smooth'
+      });
+    }
+  }, [categoriaSeleccionada]);
+
   const fetchData = async () => {
     try {
       const { data: tiendaData, error: tiendaError } = await supabase
@@ -90,6 +108,7 @@ export default function TiendaPage() {
 
       setCategorias(categoriasData || []);
 
+      // Cargar TODOS los productos (lazy loading se encarga del rendimiento)
       const { data: productosData } = await supabase
         .from('productos')
         .select('*')
@@ -97,28 +116,41 @@ export default function TiendaPage() {
         .eq('activo', true)
         .order('nombre');
 
-      if (productosData) {
-        const productosConImagenes = await Promise.all(
-          productosData.map(async (producto) => {
-            const { data: imagenesData } = await supabase
-              .from('imagenes_producto')
-              .select('*')
-              .eq('producto_id', producto.id)
-              .order('orden');
+      if (productosData && productosData.length > 0) {
+        // OPTIMIZACIÓN: Cargar TODAS las imágenes en una sola consulta
+        const productosIds = productosData.map(p => p.id);
+        const { data: todasImagenes } = await supabase
+          .from('imagenes_producto')
+          .select('*')
+          .in('producto_id', productosIds)
+          .order('orden');
 
-            const { data: categoriaData } = await supabase
-              .from('categorias')
-              .select('*')
-              .eq('id', producto.categoria_id)
-              .single();
+        // OPTIMIZACIÓN: Cargar TODAS las categorías necesarias en una sola consulta
+        const categoriasIds = [...new Set(productosData.map(p => p.categoria_id).filter(Boolean))];
+        const { data: todasCategorias } = await supabase
+          .from('categorias')
+          .select('*')
+          .in('id', categoriasIds);
 
-            return {
-              ...producto,
-              imagenes: imagenesData || [],
-              categoria: categoriaData || null,
-            };
-          })
-        );
+        // Crear un mapa de imágenes por producto
+        const imagenesPorProducto = (todasImagenes || []).reduce((acc, img) => {
+          if (!acc[img.producto_id]) acc[img.producto_id] = [];
+          acc[img.producto_id].push(img);
+          return acc;
+        }, {} as Record<string, ImagenProducto[]>);
+
+        // Crear un mapa de categorías por ID
+        const categoriasPorId = (todasCategorias || []).reduce((acc, cat) => {
+          acc[cat.id] = cat;
+          return acc;
+        }, {} as Record<string, Categoria>);
+
+        // Combinar datos sin hacer consultas adicionales
+        const productosConImagenes = productosData.map((producto) => ({
+          ...producto,
+          imagenes: imagenesPorProducto[producto.id] || [],
+          categoria: producto.categoria_id ? categoriasPorId[producto.categoria_id] : null,
+        }));
 
         setProductos(productosConImagenes);
       }
@@ -363,6 +395,7 @@ export default function TiendaPage() {
                     <img
                       src={producto.imagenes[0].url_imagen}
                       alt={producto.nombre}
+                      loading="lazy"
                       className="w-full h-full object-cover"
                     />
                   ) : (
