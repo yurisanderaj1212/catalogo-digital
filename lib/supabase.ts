@@ -17,7 +17,11 @@ export interface Tienda {
   longitud: number | null;
   activa: boolean;
   fecha_creacion: string;
-  whatsapp: string | null;
+  whatsapp: string | null; // DEPRECATED - mantener por compatibilidad
+  // Nuevos campos para horarios
+  hora_apertura: string | null; // Formato: "08:00:00" (TIME)
+  hora_cierre: string | null; // Formato: "17:00:00" (TIME)
+  dias_laborales: string[] | null; // ["lunes", "martes", "miercoles", "jueves", "viernes"]
 }
 
 export interface Categoria {
@@ -44,4 +48,14 @@ export interface ImagenProducto {
   producto_id: string; // UUID
   url_imagen: string;
   orden: number;
+}
+
+export interface GrupoWhatsApp {
+  id: string; // UUID
+  tienda_id: string; // UUID
+  nombre: string;
+  enlace: string;
+  orden: number;
+  activo: boolean;
+  fecha_creacion: string;
 }
