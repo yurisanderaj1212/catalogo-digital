@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase, Tienda, Producto, Categoria, ImagenProducto, GrupoWhatsApp } from '@/lib/supabase';
 import { formatearHora, formatearDias } from '@/lib/formatters';
 import { useParams, useRouter } from 'next/navigation';
@@ -29,6 +29,10 @@ export default function TiendaPage() {
   const [mostrarVolverArriba, setMostrarVolverArriba] = useState(false);
   const [productosVistos, setProductosVistos] = useState<Set<string>>(new Set());
   const [mostrarModalGrupos, setMostrarModalGrupos] = useState(false);
+  const [busquedaExpandida, setBusquedaExpandida] = useState(false);
+  const [mostrarFlechaIzq, setMostrarFlechaIzq] = useState(false);
+  const [mostrarFlechaDer, setMostrarFlechaDer] = useState(false);
+  const categoriasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchData();
@@ -228,6 +232,43 @@ export default function TiendaPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Funciones para scroll de categorías
+  const scrollCategorias = (direccion: 'izq' | 'der') => {
+    if (categoriasRef.current) {
+      const scrollAmount = 200;
+      const newScrollLeft = direccion === 'izq' 
+        ? categoriasRef.current.scrollLeft - scrollAmount
+        : categoriasRef.current.scrollLeft + scrollAmount;
+      
+      categoriasRef.current.scrollTo({
+        left: newScrollLeft,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const actualizarFlechasCategorias = () => {
+    if (categoriasRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = categoriasRef.current;
+      setMostrarFlechaIzq(scrollLeft > 10);
+      setMostrarFlechaDer(scrollLeft < scrollWidth - clientWidth - 10);
+    }
+  };
+
+  useEffect(() => {
+    const container = categoriasRef.current;
+    if (container) {
+      actualizarFlechasCategorias();
+      container.addEventListener('scroll', actualizarFlechasCategorias);
+      window.addEventListener('resize', actualizarFlechasCategorias);
+      
+      return () => {
+        container.removeEventListener('scroll', actualizarFlechasCategorias);
+        window.removeEventListener('resize', actualizarFlechasCategorias);
+      };
+    }
+  }, [categorias]);
+
   // Formatear horarios con memoización
   const horariosFormateados = useMemo(() => {
     if (!tienda || !tienda.hora_apertura || !tienda.hora_cierre || !tienda.dias_laborales || tienda.dias_laborales.length === 0) {
@@ -322,47 +363,101 @@ export default function TiendaPage() {
             )}
           </div>
 
-          {/* Buscador */}
-          <div className="relative mb-3">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar productos..."
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          {/* Buscador expandible */}
+          <div className="mb-3">
+            {busquedaExpandida ? (
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar productos..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  onBlur={() => {
+                    if (!busqueda) setBusquedaExpandida(false);
+                  }}
+                  autoFocus
+                  className="w-full pl-9 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  onClick={() => {
+                    setBusqueda('');
+                    setBusquedaExpandida(false);
+                  }}
+                  className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setBusquedaExpandida(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors w-full justify-center"
+              >
+                <Search className="w-4 h-4 text-gray-600" />
+                <span className="text-sm text-gray-600 font-medium">Buscar productos</span>
+              </button>
+            )}
           </div>
 
-          {/* Categorías */}
+          {/* Categorías con flechas de navegación */}
           {categorias.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-hide">
-              <button
-                onClick={() => setCategoriaSeleccionada(null)}
-                className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors text-sm ${
-                  categoriaSeleccionada === null
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+            <div className="relative mb-3">
+              {/* Flecha izquierda */}
+              {mostrarFlechaIzq && (
+                <button
+                  onClick={() => scrollCategorias('izq')}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow-lg rounded-full p-1.5 hover:bg-gray-100 transition-colors"
+                  aria-label="Ver categorías anteriores"
+                >
+                  <ChevronLeft className="w-5 h-5 text-gray-700" />
+                </button>
+              )}
+
+              {/* Contenedor de categorías */}
+              <div 
+                ref={categoriasRef}
+                className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide scroll-smooth"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                Todas ({productos.length})
-              </button>
-              {categorias.map((categoria) => {
-                const count = productos.filter(p => p.categoria_id === categoria.id).length;
-                return (
-                  <button
-                    key={categoria.id}
-                    onClick={() => setCategoriaSeleccionada(categoria.id)}
-                    className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors text-sm ${
-                      categoriaSeleccionada === categoria.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {categoria.nombre} ({count})
-                  </button>
-                );
-              })}
+                <button
+                  onClick={() => setCategoriaSeleccionada(null)}
+                  className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors text-sm ${
+                    categoriaSeleccionada === null
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Todas ({productos.length})
+                </button>
+                {categorias.map((categoria) => {
+                  const count = productos.filter(p => p.categoria_id === categoria.id).length;
+                  return (
+                    <button
+                      key={categoria.id}
+                      onClick={() => setCategoriaSeleccionada(categoria.id)}
+                      className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors text-sm ${
+                        categoriaSeleccionada === categoria.id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      {categoria.nombre} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Flecha derecha */}
+              {mostrarFlechaDer && (
+                <button
+                  onClick={() => scrollCategorias('der')}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow-lg rounded-full p-1.5 hover:bg-gray-100 transition-colors"
+                  aria-label="Ver más categorías"
+                >
+                  <ChevronRight className="w-5 h-5 text-gray-700" />
+                </button>
+              )}
             </div>
           )}
         </div>
