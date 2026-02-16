@@ -106,21 +106,21 @@ export default function DashboardPage() {
         <h2 className="text-xl font-bold text-gray-900 mb-4">Accesos Rápidos</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <a
-            href="/admin/tiendas"
+            href="/admin/dashboard/tiendas"
             className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
           >
             <Store className="w-5 h-5 text-blue-600" />
             <span className="font-medium text-gray-900">Gestionar Tiendas</span>
           </a>
           <a
-            href="/admin/productos"
+            href="/admin/dashboard/productos"
             className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all"
           >
             <Package className="w-5 h-5 text-green-600" />
             <span className="font-medium text-gray-900">Gestionar Productos</span>
           </a>
           <a
-            href="/admin/categorias"
+            href="/admin/dashboard/categorias"
             className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all"
           >
             <Tag className="w-5 h-5 text-purple-600" />

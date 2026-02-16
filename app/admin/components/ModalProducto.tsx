@@ -109,31 +109,34 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
 
     setSubiendoImagen(true);
     try {
-      // Crear nombre único para el archivo
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `productos/${fileName}`;
+      // Subir a Cloudinary
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'productos_preset');
+      formData.append('folder', 'productos');
+      
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
 
-      // Subir archivo a Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('imagenes')
-        .upload(filePath, file);
+      if (!response.ok) {
+        throw new Error('Error al subir imagen a Cloudinary');
+      }
 
-      if (error) throw error;
-
-      // Obtener URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('imagenes')
-        .getPublicUrl(filePath);
-
-      // Agregar URL a la lista de imágenes
-      setImagenes([...imagenes, publicUrl]);
+      const data = await response.json();
+      
+      // Agregar URL optimizada a la lista de imágenes
+      setImagenes([...imagenes, data.secure_url]);
       
       // Resetear input
       e.target.value = '';
     } catch (error: any) {
       console.error('Error al subir imagen:', error);
-      alert(error.message || 'Error al subir la imagen');
+      alert(error.message || 'Error al subir la imagen. Verifica tu conexión.');
     } finally {
       setSubiendoImagen(false);
     }
