@@ -2,74 +2,160 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { User, Session } from '@supabase/supabase-js';
+
+interface AdminInfo {
+  id: string;
+  email: string;
+  nombre: string | null;
+  es_super_admin: boolean;
+}
 
 interface AuthContextType {
-  user: any | null;
+  user: User | null;
+  session: Session | null;
+  adminInfo: AdminInfo | null;
   loading: boolean;
-  signIn: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signOut: () => void;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signOut: () => Promise<void>;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
+  adminInfo: null,
   loading: true,
   signIn: async () => ({ success: false }),
-  signOut: () => {},
+  signOut: async () => {},
+  isAdmin: false,
+  isSuperAdmin: false,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [adminInfo, setAdminInfo] = useState<AdminInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar si hay sesión guardada
-    const savedUser = localStorage.getItem('admin_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
+    // Obtener sesión inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchAdminInfo(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Escuchar cambios de autenticación
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchAdminInfo(session.user.id);
+      } else {
+        setAdminInfo(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (username: string, password: string) => {
+  const fetchAdminInfo = async (userId: string) => {
     try {
-      // Buscar usuario en la base de datos
-      const { data: usuarios, error } = await supabase
-        .from('usuarios_admin')
-        .select('*')
-        .eq('username', username)
+      const { data, error } = await supabase
+        .from('admins')
+        .select('id, email, nombre, es_super_admin')
+        .eq('user_id', userId)
         .eq('activo', true)
         .single();
 
-      if (error || !usuarios) {
-        return { success: false, error: 'Usuario no encontrado' };
+      if (error) {
+        console.error('Error fetching admin info:', error);
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        setAdminInfo(null);
+      } else {
+        setAdminInfo(data);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setAdminInfo(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
       }
 
-      // Verificar contraseña (en producción deberías usar bcrypt)
-      // Por ahora comparamos directamente con el hash almacenado
-      if (usuarios.password_hash === password) {
-        const userData = {
-          id: usuarios.id,
-          username: usuarios.username,
-        };
-        setUser(userData);
-        localStorage.setItem('admin_user', JSON.stringify(userData));
+      if (data.user) {
+        // Verificar que el usuario sea admin
+        const { data: adminData, error: adminError } = await supabase
+          .from('admins')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .eq('activo', true)
+          .single();
+
+        if (adminError || !adminData) {
+          // No es admin, cerrar sesión
+          await supabase.auth.signOut();
+          return { success: false, error: 'No tienes permisos de administrador' };
+        }
+
         return { success: true };
-      } else {
-        return { success: false, error: 'Contraseña incorrecta' };
       }
+
+      return { success: false, error: 'Error al iniciar sesión' };
     } catch (error) {
       console.error('Error al iniciar sesión:', error);
       return { success: false, error: 'Error al iniciar sesión' };
     }
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('admin_user');
+    setSession(null);
+    setAdminInfo(null);
   };
 
+  const isAdmin = !!adminInfo;
+  const isSuperAdmin = adminInfo?.es_super_admin ?? false;
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        adminInfo,
+        loading,
+        signIn,
+        signOut,
+        isAdmin,
+        isSuperAdmin,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

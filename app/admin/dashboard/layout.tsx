@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { Home, Package, Store, Tag, LogOut, Menu, X } from 'lucide-react';
+import { Home, Package, Store, Tag, LogOut, Menu, X, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -44,6 +44,7 @@ export default function DashboardLayout({
     { icon: Store, label: 'Tiendas', href: '/admin/dashboard/tiendas' },
     { icon: Tag, label: 'Categorías', href: '/admin/dashboard/categorias' },
     { icon: Package, label: 'Productos', href: '/admin/dashboard/productos' },
+    { icon: Users, label: 'Administradores', href: '/admin/dashboard/administradores' },
   ];
 
   return (
@@ -62,7 +63,7 @@ export default function DashboardLayout({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600 hidden sm:block">
-              {user.username}
+              {user?.email}
             </span>
             <button
               onClick={handleSignOut}
