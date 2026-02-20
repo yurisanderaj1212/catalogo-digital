@@ -170,17 +170,20 @@ export default function CategoriasPage() {
       </div>
 
       {categoriasFiltradas.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {categoriasFiltradas.map((categoria) => (
             <div
               key={categoria.id}
               className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2 flex-1">
-                  <Tag className="w-5 h-5 text-purple-600" />
-                  <h3 className="font-semibold text-gray-900">{categoria.nombre}</h3>
-                </div>
+              {/* Header con nombre e icono */}
+              <div className="flex items-start gap-2 mb-2">
+                <Tag className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+                <h3 className="font-semibold text-gray-900 text-sm md:text-base break-all flex-1">{categoria.nombre}</h3>
+              </div>
+
+              {/* Badge de estado - debajo en móvil, al lado en desktop */}
+              <div className="mb-3">
                 <button
                   onClick={() => toggleActiva(categoria.id, categoria.activa)}
                   className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -194,9 +197,9 @@ export default function CategoriasPage() {
               </div>
 
               {categoria.tienda && (
-                <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
-                  <Store className="w-4 h-4" />
-                  <span>{categoria.tienda.nombre}</span>
+                <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600 mb-3">
+                  <Store className="w-4 h-4 shrink-0" />
+                  <span className="break-all">{categoria.tienda.nombre}</span>
                 </div>
               )}
 

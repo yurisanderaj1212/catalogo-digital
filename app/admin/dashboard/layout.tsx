@@ -97,14 +97,6 @@ export default function DashboardLayout({
         </nav>
       </aside>
 
-      {/* Overlay para móvil */}
-      {menuAbierto && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-10 lg:hidden"
-          onClick={() => setMenuAbierto(false)}
-        />
-      )}
-
       {/* Contenido principal - con margen para header y sidebar */}
       <main className="pt-16 lg:pl-64">
         <div className="p-4 lg:p-8">
