@@ -14,12 +14,12 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
   const [tiendas, setTiendas] = useState<Tienda[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
+  const [tiendasSeleccionadas, setTiendasSeleccionadas] = useState<string[]>([]); // Array de IDs de tiendas
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
     precio: '',
-    moneda: 'CUP' as 'CUP' | 'USD' | 'EUR', // Moneda por defecto
-    tienda_id: '',
+    moneda: 'CUP' as 'CUP' | 'USD' | 'EUR',
     categoria_id: '',
     disponible: true,
     activo: true,
@@ -41,24 +41,27 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
         nombre: producto.nombre || '',
         descripcion: producto.descripcion || '',
         precio: producto.precio?.toString() || '',
-        moneda: producto.moneda || 'CUP', // Cargar moneda del producto
-        tienda_id: producto.tienda_id || '',
+        moneda: producto.moneda || 'CUP',
         categoria_id: producto.categoria_id || '',
         disponible: producto.disponible,
         activo: producto.activo,
       });
       fetchImagenes(producto.id);
+      fetchTiendasProducto(producto.id);
     }
   }, [producto]);
 
   useEffect(() => {
-    if (formData.tienda_id) {
-      const catsFiltradas = categorias.filter(c => c.tienda_id === formData.tienda_id);
+    // Filtrar categorías según las tiendas seleccionadas
+    if (tiendasSeleccionadas.length > 0) {
+      const catsFiltradas = categorias.filter(c => 
+        tiendasSeleccionadas.includes(c.tienda_id)
+      );
       setCategoriasFiltradas(catsFiltradas);
     } else {
       setCategoriasFiltradas([]);
     }
-  }, [formData.tienda_id, categorias]);
+  }, [tiendasSeleccionadas, categorias]);
 
   const fetchTiendasYCategorias = async () => {
     try {
@@ -83,6 +86,21 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
       setImagenes(data?.map(img => img.url_imagen) || []);
     } catch (error) {
       console.error('Error:', error);
+    }
+  };
+
+  const fetchTiendasProducto = async (productoId: string) => {
+    try {
+      const { data } = await supabase
+        .from('productos_tiendas')
+        .select('tienda_id')
+        .eq('producto_id', productoId);
+      
+      if (data) {
+        setTiendasSeleccionadas(data.map(pt => pt.tienda_id));
+      }
+    } catch (error) {
+      console.error('Error al cargar tiendas del producto:', error);
     }
   };
 
@@ -151,23 +169,33 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validar que se haya seleccionado al menos una tienda
+    if (tiendasSeleccionadas.length === 0) {
+      setError('Debes seleccionar al menos una tienda');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const dataToSave = {
         ...formData,
         precio: parseFloat(formData.precio),
+        tienda_id: tiendasSeleccionadas[0], // Mantener compatibilidad (primera tienda seleccionada)
       };
 
       let productoId = producto?.id;
 
       if (producto) {
+        // Actualizar producto existente
         const { error } = await supabase
           .from('productos')
           .update(dataToSave)
           .eq('id', producto.id);
         if (error) throw error;
       } else {
+        // Crear nuevo producto
         const { data, error } = await supabase
           .from('productos')
           .insert([dataToSave])
@@ -177,8 +205,27 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
         productoId = data.id;
       }
 
-      // Guardar imágenes
+      // Guardar relaciones con tiendas
       if (productoId) {
+        // Eliminar relaciones anteriores
+        await supabase
+          .from('productos_tiendas')
+          .delete()
+          .eq('producto_id', productoId);
+
+        // Insertar nuevas relaciones
+        const relacionesData = tiendasSeleccionadas.map(tiendaId => ({
+          producto_id: productoId,
+          tienda_id: tiendaId,
+        }));
+        
+        const { error: relacionesError } = await supabase
+          .from('productos_tiendas')
+          .insert(relacionesData);
+        
+        if (relacionesError) throw relacionesError;
+
+        // Guardar imágenes
         await supabase.from('imagenes_producto').delete().eq('producto_id', productoId);
         
         if (imagenes.length > 0) {
@@ -270,22 +317,35 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tienda <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tiendas donde se vende <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.tienda_id}
-                onChange={(e) => setFormData({ ...formData, tienda_id: e.target.value, categoria_id: '' })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Selecciona una tienda</option>
+              <div className="space-y-2 p-3 border border-gray-300 rounded-lg bg-gray-50">
                 {tiendas.map((tienda) => (
-                  <option key={tienda.id} value={tienda.id}>
-                    {tienda.nombre}
-                  </option>
+                  <label key={tienda.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={tiendasSeleccionadas.includes(tienda.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setTiendasSeleccionadas([...tiendasSeleccionadas, tienda.id]);
+                        } else {
+                          setTiendasSeleccionadas(tiendasSeleccionadas.filter(id => id !== tienda.id));
+                          // Limpiar categoría si se desmarca la última tienda
+                          if (tiendasSeleccionadas.length === 1) {
+                            setFormData({ ...formData, categoria_id: '' });
+                          }
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{tienda.nombre}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
+              {tiendasSeleccionadas.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">Selecciona al menos una tienda</p>
+              )}
             </div>
           </div>
 
@@ -295,7 +355,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
               value={formData.categoria_id}
               onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={!formData.tienda_id}
+              disabled={tiendasSeleccionadas.length === 0}
             >
               <option value="">Sin categoría</option>
               {categoriasFiltradas.map((categoria) => (
@@ -304,8 +364,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                 </option>
               ))}
             </select>
-            {!formData.tienda_id && (
-              <p className="text-xs text-gray-500 mt-1">Selecciona una tienda primero</p>
+            {tiendasSeleccionadas.length === 0 && (
+              <p className="text-xs text-gray-500 mt-1">Selecciona al menos una tienda primero</p>
             )}
           </div>
 

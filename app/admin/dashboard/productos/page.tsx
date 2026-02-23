@@ -8,6 +8,7 @@ import ModalProducto from '../../components/ModalProducto';
 
 interface ProductoExtendido extends Producto {
   tienda?: Tienda;
+  tiendas?: Tienda[]; // Nuevo: array de tiendas donde está el producto
   categoria?: Categoria;
   imagenes?: any[];
 }
@@ -37,10 +38,11 @@ export default function ProductosPage() {
 
   const fetchData = async () => {
     try {
-      const [productosRes, tiendasRes, categoriasRes] = await Promise.all([
+      const [productosRes, tiendasRes, categoriasRes, productosTiendasRes] = await Promise.all([
         supabase.from('productos').select('*').order('nombre'),
         supabase.from('tiendas').select('*'),
         supabase.from('categorias').select('*'),
+        supabase.from('productos_tiendas').select('*'),
       ]);
 
       if (productosRes.data && tiendasRes.data && categoriasRes.data) {
@@ -60,10 +62,19 @@ export default function ProductosPage() {
           return acc;
         }, {} as Record<string, any[]>);
 
+        // Crear un mapa de tiendas por producto
+        const tiendasPorProducto = (productosTiendasRes.data || []).reduce((acc, pt) => {
+          if (!acc[pt.producto_id]) acc[pt.producto_id] = [];
+          const tienda = tiendasRes.data.find(t => t.id === pt.tienda_id);
+          if (tienda) acc[pt.producto_id].push(tienda);
+          return acc;
+        }, {} as Record<string, any[]>);
+
         // Combinar datos sin hacer consultas adicionales
         const productosConRelaciones = productosRes.data.map((prod) => ({
           ...prod,
-          tienda: tiendasRes.data.find((t) => t.id === prod.tienda_id),
+          tienda: tiendasRes.data.find((t) => t.id === prod.tienda_id), // Mantener compatibilidad
+          tiendas: tiendasPorProducto[prod.id] || [], // Nuevo: array de tiendas
           categoria: categoriasRes.data.find((c) => c.id === prod.categoria_id),
           imagenes: imagenesPorProducto[prod.id] || [],
         }));
@@ -264,8 +275,10 @@ export default function ProductosPage() {
                 {producto.categoria && (
                   <p className="text-xs text-gray-500 mb-1">{producto.categoria.nombre}</p>
                 )}
-                {producto.tienda && (
-                  <p className="text-xs text-gray-500 mb-2">{producto.tienda.nombre}</p>
+                {producto.tiendas && producto.tiendas.length > 0 && (
+                  <p className="text-xs text-gray-500 mb-2">
+                    🏪 {producto.tiendas.map(t => t.nombre).join(', ')}
+                  </p>
                 )}
 
                 <div className="grid grid-cols-2 gap-2 mb-2">

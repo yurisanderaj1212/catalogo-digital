@@ -112,11 +112,25 @@ export default function TiendaPage() {
 
       setCategorias(categoriasData || []);
 
-      // Cargar TODOS los productos (lazy loading se encarga del rendimiento)
+      // Cargar productos de esta tienda usando la tabla intermedia
+      const { data: productosTiendasData } = await supabase
+        .from('productos_tiendas')
+        .select('producto_id')
+        .eq('tienda_id', tiendaId);
+
+      if (!productosTiendasData || productosTiendasData.length === 0) {
+        setProductos([]);
+        setLoading(false);
+        return;
+      }
+
+      const productosIds = productosTiendasData.map(pt => pt.producto_id);
+
+      // Cargar los productos
       const { data: productosData } = await supabase
         .from('productos')
         .select('*')
-        .eq('tienda_id', tiendaId)
+        .in('id', productosIds)
         .eq('activo', true)
         .order('nombre');
 

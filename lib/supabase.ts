@@ -57,6 +57,13 @@ export interface ImagenProducto {
   orden: number;
 }
 
+export interface ProductoTienda {
+  id: string; // UUID
+  producto_id: string; // UUID
+  tienda_id: string; // UUID
+  fecha_agregado: string;
+}
+
 export interface GrupoWhatsApp {
   id: string; // UUID
   tienda_id: string; // UUID
