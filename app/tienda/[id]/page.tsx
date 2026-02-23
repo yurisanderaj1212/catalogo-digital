@@ -499,8 +499,13 @@ export default function TiendaPage() {
                   <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2 leading-tight">
                     {producto.nombre}
                   </h3>
+                  {producto.descripcion && (
+                    <p className="text-xs text-gray-600 mb-1.5 line-clamp-2">
+                      {producto.descripcion}
+                    </p>
+                  )}
                   <p className="text-base font-bold text-blue-600">
-                    ${producto.precio.toLocaleString('es-CU')} <span className="text-xs">CUP</span>
+                    ${producto.precio.toLocaleString('es-CU')} <span className="text-xs">{producto.moneda}</span>
                   </p>
                 </div>
               </div>
@@ -520,11 +525,11 @@ export default function TiendaPage() {
       {/* Modal de producto - Diseño mejorado */}
       {productoSeleccionado && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-white bg-opacity-90 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3"
           onClick={cerrarModal}
         >
           <div 
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+            className="bg-gray-50 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header compacto con gradiente */}
@@ -612,7 +617,7 @@ export default function TiendaPage() {
                       <span className="text-2xl font-bold text-blue-700">
                         ${productoSeleccionado.precio.toLocaleString('es-CU')}
                       </span>
-                      <span className="text-sm text-blue-600 font-medium">CUP</span>
+                      <span className="text-sm text-blue-600 font-medium">{productoSeleccionado.moneda}</span>
                     </div>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
                       productoSeleccionado.disponible 

@@ -187,7 +187,7 @@ export default function ProductosPage() {
                   <span className="text-lg font-bold text-blue-600">
                     ${producto.precio.toLocaleString('es-CU')}
                   </span>
-                  <span className="text-xs text-gray-500">CUP</span>
+                  <span className="text-xs text-gray-500">{producto.moneda}</span>
                 </div>
 
                 {producto.categoria && (

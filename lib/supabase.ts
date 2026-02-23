@@ -42,6 +42,7 @@ export interface Producto {
   nombre: string;
   descripcion: string | null;
   precio: number;
+  moneda: 'CUP' | 'USD' | 'EUR'; // Multimoneda: Peso Cubano, Dólar, Euro
   disponible: boolean;
   activo: boolean; // Nota: tu tabla usa "activo" no "activa"
   tienda_id: string; // UUID

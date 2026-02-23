@@ -18,6 +18,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     nombre: '',
     descripcion: '',
     precio: '',
+    moneda: 'CUP' as 'CUP' | 'USD' | 'EUR', // Moneda por defecto
     tienda_id: '',
     categoria_id: '',
     disponible: true,
@@ -40,6 +41,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
         nombre: producto.nombre || '',
         descripcion: producto.descripcion || '',
         precio: producto.precio?.toString() || '',
+        moneda: producto.moneda || 'CUP', // Cargar moneda del producto
         tienda_id: producto.tienda_id || '',
         categoria_id: producto.categoria_id || '',
         disponible: producto.disponible,
@@ -201,8 +203,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-xl font-bold text-gray-900">
+        <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
+          <h2 className="text-lg font-bold text-gray-900">
             {producto ? 'Editar Producto' : 'Nuevo Producto'}
           </h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
@@ -210,7 +212,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
               {error}
@@ -235,24 +237,36 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             <textarea
               value={formData.descripcion}
               onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              rows={2}
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Precio (CUP) <span className="text-red-500">*</span>
+                Precio <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.precio}
-                onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.precio}
+                  onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="0.00"
+                />
+                <select
+                  value={formData.moneda}
+                  onChange={(e) => setFormData({ ...formData, moneda: e.target.value as 'CUP' | 'USD' | 'EUR' })}
+                  className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-medium"
+                >
+                  <option value="CUP">CUP</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -301,10 +315,10 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             
             {/* Lista de imágenes */}
             {imagenes.length > 0 && (
-              <div className="space-y-2 mb-3">
+              <div className="space-y-1.5 mb-2">
                 {imagenes.map((img, index) => (
-                  <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                    <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                  <div key={index} className="flex items-center gap-2 p-1.5 bg-gray-50 rounded-lg">
+                    <img src={img} alt="" className="w-10 h-10 object-cover rounded" />
                     <span className="flex-1 text-sm text-gray-600 truncate">{img}</span>
                     <button
                       type="button"
@@ -319,18 +333,25 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             )}
 
             {/* Pestañas para tipo de subida */}
-            <div className="flex gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => setTipoSubida('pc')}
-                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            <div className="flex gap-2 mb-2">
+              <label
+                htmlFor="file-upload"
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer text-center ${
                   tipoSubida === 'pc'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                } ${subiendoImagen ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                📁 Subir desde PC
-              </button>
+                {subiendoImagen ? '⏳ Subiendo...' : '📁 Subir desde PC'}
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={subirImagenDesdePC}
+                disabled={subiendoImagen}
+                className="hidden"
+                id="file-upload"
+              />
               <button
                 type="button"
                 onClick={() => setTipoSubida('url')}
@@ -343,41 +364,6 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                 🔗 Agregar URL
               </button>
             </div>
-
-            {/* Subir desde PC */}
-            {tipoSubida === 'pc' && (
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={subirImagenDesdePC}
-                  disabled={subiendoImagen}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label
-                  htmlFor="file-upload"
-                  className={`cursor-pointer ${subiendoImagen ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {subiendoImagen ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                      <p className="text-sm text-gray-600">Subiendo imagen...</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
-                        <Plus className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <p className="text-sm font-medium text-gray-700">
-                        Haz clic para seleccionar una imagen
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG, GIF hasta 5MB</p>
-                    </div>
-                  )}
-                </label>
-              </div>
-            )}
 
             {/* Agregar por URL */}
             {tipoSubida === 'url' && (
@@ -428,18 +414,18 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
             >
               {loading ? 'Guardando...' : 'Guardar'}
             </button>

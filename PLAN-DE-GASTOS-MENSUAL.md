@@ -85,11 +85,11 @@
 
 | Registrador | Primer Año | Renovación Anual | Total 5 Años |
 |-------------|------------|------------------|--------------|
-| **Namecheap** | $9.58 | $13.98 | $65.50 |
-| **Hostinger** | $9.99 | $12.99 | $61.95 |
-| **Cloudflare** | $9.77 | $9.77 | $48.85 |
-| **Dynadot** | $8.99 | $10.99 | $52.95 |
-| **GoDaddy** | $11.99 | $19.99 | $91.95 |
+| **Namecheap** | $9.58    | $13.98           | $65.50 |
+| **Hostinger** | $9.99    | $12.99           | $61.95 |
+| **Cloudflare** | $9.77   | $9.77            | $48.85 |
+| **Dynadot** | $8.99      | $10.99           | $52.95 |
+| **GoDaddy** | $11.99     | $19.99           | $91.95 |
 
 **Recomendación:** Cloudflare o Namecheap (mejor precio a largo plazo)
 
@@ -154,13 +154,13 @@
 
 ## 📊 COMPARACIÓN CON COMPETENCIA
 
-| Concepto | Tu Solución | Competencia Típica |
-|----------|-------------|-------------------|
-| Hosting | $0-7/mes | $15-50/mes |
-| Base de Datos | $0-25/mes | $10-30/mes |
-| Imágenes | $0 | $10-20/mes |
-| Dominio | $10/año | $12-20/año |
-| **TOTAL** | **$10-394/año** | **$500-1200/año** |
+| Concepto      | Tu Solución     | Competencia Típica |
+|----------     |-------------    |-------------------|
+| Hosting       | $0-7/mes        | $15-50/mes |
+| Base de Datos | $0-25/mes       | $10-30/mes |
+| Imágenes      | $0              | $10-20/mes |
+| Dominio       | $10/año         | $12-20/año |
+| **TOTAL**     | **$10-394/año** | **$500-1200/año** |
 
 **Ahorro:** 50-70% vs soluciones tradicionales
 

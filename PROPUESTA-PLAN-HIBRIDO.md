@@ -20,13 +20,13 @@ Después de analizar las opciones disponibles en el mercado, recomendamos implem
 
 ### Inversión Mensual Detallada
 
-| Concepto | Proveedor | Plan | Costo Mensual | Costo Anual |
-|----------|-----------|------|---------------|-------------|
-| **Hosting Web** | Render | Starter | $7.00 | $84.00 |
-| **Dominio Personalizado** | Cloudflare/Namecheap | Registro | $0.83 | $10.00 |
-| **Base de Datos** | Supabase | Free | $0.00 | $0.00 |
-| **Almacenamiento de Imágenes** | Cloudinary | Free | $0.00 | $0.00 |
-| **TOTAL** | - | - | **$7.83** | **$94.00** |
+| Concepto                       | Proveedor | Plan | Costo Mensual | Costo Anual |
+|--------------------------------|-----------|------|---------------|-------------|
+| **Hosting Web**                | Render               | Starter   | $7.00 | $84.00 |
+| **Dominio Personalizado**      | Cloudflare/Namecheap | Registro | $0.83 | $10.00 |
+| **Base de Datos**              | Supabase             | Free | $0.00 | $0.00 |
+| **Almacenamiento de Imágenes** | Cloudinary           | Free | $0.00 | $0.00 |
+| **TOTAL**                      | -                    | - | **$7.83** | **$94.00** |
 
 ---
 
