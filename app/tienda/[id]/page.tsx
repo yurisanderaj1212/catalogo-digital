@@ -30,6 +30,7 @@ export default function TiendaPage() {
   const [productosVistos, setProductosVistos] = useState<Set<string>>(new Set());
   const [mostrarModalGrupos, setMostrarModalGrupos] = useState(false);
   const [busquedaExpandida, setBusquedaExpandida] = useState(false);
+  const [imagenesHD, setImagenesHD] = useState<Record<string, boolean>>({});
   const [mostrarFlechaIzq, setMostrarFlechaIzq] = useState(false);
   const [mostrarFlechaDer, setMostrarFlechaDer] = useState(false);
   const categoriasRef = useRef<HTMLDivElement>(null);
@@ -178,9 +179,17 @@ export default function TiendaPage() {
     setProductoSeleccionado(producto);
     setImagenActual(0);
     document.body.style.overflow = 'hidden';
-    
-    // Marcar producto como visto
     marcarProductoComoVisto(producto.id);
+
+    // Precargar imágenes HD en segundo plano sin bloquear el modal
+    producto.imagenes.forEach((img) => {
+      const urlHD = optimizarImagenCloudinary(img.url_original || img.url_imagen, 800);
+      const image = new Image();
+      image.onload = () => {
+        setImagenesHD(prev => ({ ...prev, [img.url_imagen]: true }));
+      };
+      image.src = urlHD;
+    });
   };
 
   const marcarProductoComoVisto = (productoId: string) => {
@@ -205,6 +214,7 @@ export default function TiendaPage() {
   const cerrarModal = () => {
     setProductoSeleccionado(null);
     setImagenActual(0);
+    setImagenesHD({});
     document.body.style.overflow = 'unset';
   };
 
@@ -306,9 +316,10 @@ export default function TiendaPage() {
           <div className="flex items-center gap-2 mb-2">
             <button
               onClick={() => router.push('/')}
-              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg transition-all shadow-sm text-xs font-medium"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Salir</span>
             </button>
             <h1 className="text-base font-bold text-gray-900 truncate flex-1">{tienda.nombre}</h1>
             
@@ -546,9 +557,13 @@ export default function TiendaPage() {
                 <div>
                   <div className="relative bg-gray-50">
                     <img
-                      src={optimizarImagenCloudinary(productoSeleccionado.imagenes[imagenActual].url_original || productoSeleccionado.imagenes[imagenActual].url_imagen, 800)}
+                      src={
+                        imagenesHD[productoSeleccionado.imagenes[imagenActual].url_imagen]
+                          ? optimizarImagenCloudinary(productoSeleccionado.imagenes[imagenActual].url_original || productoSeleccionado.imagenes[imagenActual].url_imagen, 800)
+                          : productoSeleccionado.imagenes[imagenActual].url_imagen
+                      }
                       alt={productoSeleccionado.nombre}
-                      className="w-full h-64 object-contain"
+                      className="w-full h-64 object-contain transition-all duration-300"
                     />
                     
                     {productoSeleccionado.imagenes.length > 1 && (
