@@ -8,7 +8,7 @@ import { MapPin, Search, ArrowLeft, Phone, X, ChevronLeft, ChevronRight, Clock, 
 import ModalGruposWhatsApp from './components/ModalGruposWhatsApp';
 
 interface ProductoConImagenes extends Producto {
-  imagenes: ImagenProducto[];
+  imagenes: (ImagenProducto & { url_original?: string })[];
   categoria: Categoria | null;
 }
 
@@ -77,47 +77,29 @@ export default function TiendaPage() {
     }
   }, [categoriaSeleccionada]);
 
+  // Optimizar URL de Cloudinary para reducir tamaño de imagen
+  const optimizarImagenCloudinary = (url: string, ancho: number = 400): string => {
+    if (!url || !url.includes('cloudinary.com')) return url;
+    // Insertar transformaciones: ancho, calidad automática, formato automático (WebP)
+    return url.replace('/upload/', `/upload/w_${ancho},q_auto,f_auto/`);
+  };
+
   const fetchData = async () => {
     try {
-      const { data: tiendaData, error: tiendaError } = await supabase
-        .from('tiendas')
-        .select('*')
-        .eq('id', tiendaId)
-        .eq('activa', true)
-        .single();
+      // OPTIMIZACIÓN: Cargar tienda, grupos y categorías EN PARALELO
+      const [tiendaRes, gruposRes, categoriasRes, productosTiendasRes] = await Promise.all([
+        supabase.from('tiendas').select('*').eq('id', tiendaId).eq('activa', true).single(),
+        supabase.from('grupos_whatsapp').select('*').eq('tienda_id', tiendaId).eq('activo', true).order('orden'),
+        supabase.from('categorias').select('*').eq('tienda_id', tiendaId).eq('activa', true).order('nombre'),
+        supabase.from('productos_tiendas').select('producto_id').eq('tienda_id', tiendaId),
+      ]);
 
-      if (tiendaError) throw tiendaError;
-      setTienda(tiendaData);
+      if (tiendaRes.error) throw tiendaRes.error;
+      setTienda(tiendaRes.data);
+      setGrupos(gruposRes.data || []);
+      setCategorias(categoriasRes.data || []);
 
-      // Cargar grupos de WhatsApp
-      const { data: gruposData, error: gruposError } = await supabase
-        .from('grupos_whatsapp')
-        .select('*')
-        .eq('tienda_id', tiendaId)
-        .eq('activo', true)
-        .order('orden');
-
-      if (gruposError) {
-        console.error('Error al cargar grupos:', gruposError);
-      }
-
-      setGrupos(gruposData || []);
-
-      const { data: categoriasData } = await supabase
-        .from('categorias')
-        .select('*')
-        .eq('tienda_id', tiendaId)
-        .eq('activa', true)
-        .order('nombre');
-
-      setCategorias(categoriasData || []);
-
-      // Cargar productos de esta tienda usando la tabla intermedia
-      const { data: productosTiendasData } = await supabase
-        .from('productos_tiendas')
-        .select('producto_id')
-        .eq('tienda_id', tiendaId);
-
+      const productosTiendasData = productosTiendasRes.data;
       if (!productosTiendasData || productosTiendasData.length === 0) {
         setProductos([]);
         setLoading(false);
@@ -126,7 +108,7 @@ export default function TiendaPage() {
 
       const productosIds = productosTiendasData.map(pt => pt.producto_id);
 
-      // Cargar los productos
+      // Cargar productos
       const { data: productosData } = await supabase
         .from('productos')
         .select('*')
@@ -135,35 +117,33 @@ export default function TiendaPage() {
         .order('nombre');
 
       if (productosData && productosData.length > 0) {
-        // OPTIMIZACIÓN: Cargar TODAS las imágenes en una sola consulta
-        const productosIds = productosData.map(p => p.id);
-        const { data: todasImagenes } = await supabase
-          .from('imagenes_producto')
-          .select('*')
-          .in('producto_id', productosIds)
-          .order('orden');
-
-        // OPTIMIZACIÓN: Cargar TODAS las categorías necesarias en una sola consulta
+        // OPTIMIZACIÓN: Cargar imágenes y categorías EN PARALELO
+        const ids = productosData.map(p => p.id);
         const categoriasIds = [...new Set(productosData.map(p => p.categoria_id).filter(Boolean))];
-        const { data: todasCategorias } = await supabase
-          .from('categorias')
-          .select('*')
-          .in('id', categoriasIds);
 
-        // Crear un mapa de imágenes por producto
-        const imagenesPorProducto = (todasImagenes || []).reduce((acc, img) => {
+        const [imagenesRes, categoriasProductosRes] = await Promise.all([
+          supabase.from('imagenes_producto').select('*').in('producto_id', ids).order('orden'),
+          categoriasIds.length > 0
+            ? supabase.from('categorias').select('*').in('id', categoriasIds)
+            : Promise.resolve({ data: [] }),
+        ]);
+
+        const imagenesPorProducto = (imagenesRes.data || []).reduce((acc, img) => {
           if (!acc[img.producto_id]) acc[img.producto_id] = [];
-          acc[img.producto_id].push(img);
+          // Optimizar URL de Cloudinary al cargar
+          acc[img.producto_id].push({
+            ...img,
+            url_imagen: optimizarImagenCloudinary(img.url_imagen, 400),
+            url_original: img.url_imagen, // guardar original para el modal
+          });
           return acc;
-        }, {} as Record<string, ImagenProducto[]>);
+        }, {} as Record<string, any[]>);
 
-        // Crear un mapa de categorías por ID
-        const categoriasPorId = (todasCategorias || []).reduce((acc, cat) => {
+        const categoriasPorId = (categoriasProductosRes.data || []).reduce((acc, cat) => {
           acc[cat.id] = cat;
           return acc;
         }, {} as Record<string, Categoria>);
 
-        // Combinar datos sin hacer consultas adicionales
         const productosConImagenes = productosData.map((producto) => ({
           ...producto,
           imagenes: imagenesPorProducto[producto.id] || [],
@@ -566,7 +546,7 @@ export default function TiendaPage() {
                 <div>
                   <div className="relative bg-gray-50">
                     <img
-                      src={productoSeleccionado.imagenes[imagenActual].url_imagen}
+                      src={optimizarImagenCloudinary(productoSeleccionado.imagenes[imagenActual].url_original || productoSeleccionado.imagenes[imagenActual].url_imagen, 800)}
                       alt={productoSeleccionado.nombre}
                       className="w-full h-64 object-contain"
                     />
