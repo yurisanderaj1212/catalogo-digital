@@ -39,23 +39,20 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-blue-50 to-gray-100">
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            Catálogo Digital
-          </h1>
-          <p className="text-lg text-gray-600">
-            Selecciona una tienda para ver sus productos
-          </p>
-        </div>
+    <main className="min-h-screen bg-linear-to-br from-blue-50 to-gray-100 flex flex-col">
+      <div className="container mx-auto px-3 py-3 flex flex-col flex-1">
+        {/* Header compacto */}
+        <p className="text-center text-sm text-gray-500 mb-3">
+          Selecciona una tienda para ver sus productos
+        </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        {/* Grid de tiendas - 2 columnas en móvil, 3 en desktop */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-6xl mx-auto w-full">
           {tiendas.map((tienda) => (
             <Link
               key={tienda.id}
               href={`/tienda/${tienda.id}`}
-              className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group"
+              className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group active:scale-95"
             >
               <div className="aspect-video bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                 {tienda.logo ? (
@@ -65,20 +62,20 @@ export default function Home() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <Store className="w-20 h-20 text-white" />
+                  <Store className="w-12 h-12 text-white" />
                 )}
               </div>
-              <div className="p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+              <div className="p-2.5">
+                <h2 className="text-sm font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
                   {tienda.nombre}
                 </h2>
                 {tienda.descripcion && (
-                  <p className="text-gray-600 mb-4 line-clamp-2">
+                  <p className="text-gray-500 text-xs line-clamp-2 mb-1">
                     {tienda.descripcion}
                   </p>
                 )}
                 {tienda.direccion && (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs text-gray-400 line-clamp-1">
                     📍 {tienda.direccion}
                   </p>
                 )}
