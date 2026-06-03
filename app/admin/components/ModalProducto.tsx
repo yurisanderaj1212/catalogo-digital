@@ -13,7 +13,6 @@ interface ModalProductoProps {
 export default function ModalProducto({ producto, onClose, onSuccess }: ModalProductoProps) {
   const [tiendas, setTiendas] = useState<Tienda[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
   const [tiendasSeleccionadas, setTiendasSeleccionadas] = useState<string[]>([]); // Array de IDs de tiendas
   const [formData, setFormData] = useState({
     nombre: '',
@@ -51,17 +50,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     }
   }, [producto]);
 
-  useEffect(() => {
-    // Filtrar categorías según las tiendas seleccionadas
-    if (tiendasSeleccionadas.length > 0) {
-      const catsFiltradas = categorias.filter(c => 
-        tiendasSeleccionadas.includes(c.tienda_id)
-      );
-      setCategoriasFiltradas(catsFiltradas);
-    } else {
-      setCategoriasFiltradas([]);
-    }
-  }, [tiendasSeleccionadas, categorias]);
+  // Las categorías son globales: se muestran todas sin filtrar por tienda
 
   const fetchTiendasYCategorias = async () => {
     try {
@@ -358,7 +347,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
               disabled={tiendasSeleccionadas.length === 0}
             >
               <option value="">Sin categoría</option>
-              {categoriasFiltradas.map((categoria) => (
+              {categorias.map((categoria) => (
                 <option key={categoria.id} value={categoria.id}>
                   {categoria.nombre}
                 </option>
