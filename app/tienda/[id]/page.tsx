@@ -21,6 +21,8 @@ export default function TiendaPage() {
   const [productos, setProductos] = useState<ProductoConImagenes[]>([]);
   const [gruposWA, setGruposWA] = useState<GrupoWhatsApp[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string | null>(null);
+  // Categoria visible durante scroll (solo afecta la pill activa, no filtra)
+  const [categoriaVisible, setCategoriaVisible] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
   const [productoSeleccionado, setProductoSeleccionado] = useState<ProductoConImagenes | null>(null);
@@ -63,16 +65,48 @@ export default function TiendaPage() {
     }
   }, [tiendaId]);
 
-  // Auto-scroll pill activa al centro cuando cambia la categoria seleccionada
+  // Auto-scroll pill activa al centro — usa categoriaVisible en modo scroll, categoriaSeleccionada en modo filtro
   useEffect(() => {
     if (!categoriasScrollRef.current) return;
-    const key = categoriaSeleccionada ?? 'todas';
-    const pill = pillsRefs.current[key];
+    const activeKey = categoriaSeleccionada !== null
+      ? categoriaSeleccionada
+      : (categoriaVisible ?? 'todas');
+    const pill = pillsRefs.current[activeKey];
     if (pill) {
       const c = categoriasScrollRef.current;
       c.scrollTo({ left: pill.offsetLeft - c.clientWidth / 2 + pill.offsetWidth / 2, behavior: 'smooth' });
     }
-  }, [categoriaSeleccionada]);
+  }, [categoriaSeleccionada, categoriaVisible]);
+
+  // IntersectionObserver: detecta que seccion de categoria es visible durante scroll
+  useEffect(() => {
+    if (categoriaSeleccionada !== null || busqueda !== '') return;
+
+    const headerHeight = headerWrapRef.current?.offsetHeight ?? 80;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Buscamos la entrada que cruza el umbral superior del viewport (justo debajo del header)
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const id = (entry.target as HTMLElement).dataset.catId ?? null;
+            setCategoriaVisible(id);
+          }
+        });
+      },
+      {
+        rootMargin: `-${headerHeight + 8}px 0px -60% 0px`,
+        threshold: 0,
+      }
+    );
+
+    // Observar todas las secciones registradas
+    Object.values(seccionesRefs.current).forEach((el) => {
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [categoriaSeleccionada, busqueda, productos]);
 
   const optimizarImagenCloudinary = (url: string, ancho = 400): string => {
     if (!url || !url.includes('cloudinary.com')) return url;
@@ -145,6 +179,7 @@ export default function TiendaPage() {
 
   const seleccionarCategoria = (catId: string | null) => {
     setCategoriaSeleccionada(catId);
+    setCategoriaVisible(null);
     setTimeout(() => {
       const key = catId ?? 'todas';
       const sec = seccionesRefs.current[key];
@@ -287,7 +322,11 @@ export default function TiendaPage() {
                 <button
                   ref={(el) => { pillsRefs.current['todas'] = el; }}
                   onClick={() => seleccionarCategoria(null)}
-                  className={`px-2.5 py-1 rounded-full whitespace-nowrap transition-colors text-xs font-medium ${categoriaSeleccionada === null ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  className={`px-2.5 py-1 rounded-full whitespace-nowrap transition-colors text-xs font-medium ${
+                    categoriaSeleccionada === null && categoriaVisible === null
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
                 >
                   Todas ({productos.length})
                 </button>
@@ -296,7 +335,11 @@ export default function TiendaPage() {
                     key={cat.id}
                     ref={(el) => { pillsRefs.current[cat.id] = el; }}
                     onClick={() => seleccionarCategoria(cat.id)}
-                    className={`px-2.5 py-1 rounded-full whitespace-nowrap transition-colors text-xs font-medium ${categoriaSeleccionada === cat.id ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                    className={`px-2.5 py-1 rounded-full whitespace-nowrap transition-colors text-xs font-medium ${
+                      categoriaSeleccionada === cat.id || (categoriaSeleccionada === null && busqueda === '' && categoriaVisible === cat.id)
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
                   >
                     {cat.nombre} ({productos.filter((p) => p.categoria_id === cat.id).length})
                   </button>
@@ -314,7 +357,7 @@ export default function TiendaPage() {
           const secKey = grupo.categoria?.id ?? 'todas';
           const mostrarEncabezado = categoriaSeleccionada === null && busqueda === '';
           return (
-            <section key={secKey + index} ref={(el) => { seccionesRefs.current[secKey] = el; }}>
+            <section key={secKey + index} data-cat-id={grupo.categoria?.id ?? null} ref={(el) => { seccionesRefs.current[secKey] = el; }}>
               {mostrarEncabezado && (
                 <div className="flex items-center gap-2 mb-3">
                   <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">
