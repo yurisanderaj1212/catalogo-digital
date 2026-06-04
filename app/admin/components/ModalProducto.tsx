@@ -22,6 +22,9 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     categoria_id: '',
     disponible: true,
     activo: true,
+    tipo_venta: 'unidad_sola' as 'unidad_caja' | 'unidad_sola' | 'carnico' | 'granel',
+    unidades_por_caja: '' as string,
+    unidad_peso: '' as 'kg' | 'lb' | 'ambos' | '',
   });
   const [imagenes, setImagenes] = useState<string[]>([]);
   const [nuevaImagen, setNuevaImagen] = useState('');
@@ -44,6 +47,9 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
         categoria_id: producto.categoria_id || '',
         disponible: producto.disponible,
         activo: producto.activo,
+        tipo_venta: producto.tipo_venta || 'unidad_sola',
+        unidades_por_caja: producto.unidades_por_caja?.toString() || '',
+        unidad_peso: producto.unidad_peso || '',
       });
       fetchImagenes(producto.id);
       fetchTiendasProducto(producto.id);
@@ -171,7 +177,9 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
       const dataToSave = {
         ...formData,
         precio: parseFloat(formData.precio),
-        tienda_id: tiendasSeleccionadas[0], // Mantener compatibilidad (primera tienda seleccionada)
+        tienda_id: tiendasSeleccionadas[0],
+        unidades_por_caja: formData.unidades_por_caja !== '' ? parseInt(formData.unidades_por_caja) : null,
+        unidad_peso: formData.unidad_peso !== '' ? formData.unidad_peso : null,
       };
 
       let productoId = producto?.id;
@@ -338,9 +346,67 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             </div>
           </div>
 
+          {/* Tipo de venta */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-            <select
+            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de venta</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['unidad_sola', 'unidad_caja', 'carnico', 'granel'] as const).map((tipo) => (
+                <label key={tipo} className={`flex items-center gap-2 p-2 border rounded-lg cursor-pointer transition-colors ${formData.tipo_venta === tipo ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+                  <input type="radio" name="tipo_venta" value={tipo} checked={formData.tipo_venta === tipo}
+                    onChange={() => setFormData({ ...formData, tipo_venta: tipo, unidades_por_caja: '', unidad_peso: '' })}
+                    className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-medium text-gray-700 capitalize">
+                    {tipo === 'unidad_sola' ? 'Unidad sola' : tipo === 'unidad_caja' ? 'Unidad + caja' : tipo === 'carnico' ? 'Cárnico' : 'Granel'}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Campos condicionales según tipo_venta */}
+          {formData.tipo_venta === 'unidad_caja' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por caja</label>
+              <input type="number" min="1" value={formData.unidades_por_caja}
+                onChange={(e) => setFormData({ ...formData, unidades_por_caja: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ej: 24" />
+              {formData.precio && formData.unidades_por_caja && (
+                <p className="text-xs text-blue-600 mt-1 font-medium">
+                  Precio caja: ${(parseFloat(formData.precio) * parseInt(formData.unidades_por_caja)).toLocaleString('es-CU')} {formData.moneda}
+                </p>
+              )}
+            </div>
+          )}
+
+          {(formData.tipo_venta === 'carnico' || formData.tipo_venta === 'granel') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Unidad de peso</label>
+              <div className="flex gap-3">
+                {(['kg', 'lb', 'ambos'] as const).map((u) => (
+                  <label key={u} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg cursor-pointer transition-colors ${formData.unidad_peso === u ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+                    <input type="radio" name="unidad_peso" value={u} checked={formData.unidad_peso === u}
+                      onChange={() => setFormData({ ...formData, unidad_peso: u })}
+                      className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium">{u}</span>
+                  </label>
+                ))}
+              </div>
+              {formData.tipo_venta === 'carnico' && formData.precio && (
+                <div className="mt-2 space-y-0.5">
+                  {(formData.unidad_peso === 'kg' || formData.unidad_peso === 'ambos') && (
+                    <p className="text-xs text-blue-600 font-medium">Precio/kg: ${parseFloat(formData.precio).toLocaleString('es-CU')} {formData.moneda}</p>
+                  )}
+                  {(formData.unidad_peso === 'lb' || formData.unidad_peso === 'ambos') && (
+                    <p className="text-xs text-green-600 font-medium">Precio/lb: ${(parseFloat(formData.precio) / 2.205).toFixed(0)} {formData.moneda}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>            <select
               value={formData.categoria_id}
               onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
