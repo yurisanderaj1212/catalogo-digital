@@ -192,12 +192,25 @@ export default function SesionesPage() {
 
               {/* QR inline si está disponible */}
               {tieneQR && (
-                <div className="mb-3 p-2 bg-gray-50 rounded-lg text-center">
-                  <p className="text-xs text-gray-500 mb-2">Escanea con WhatsApp → Dispositivos vinculados</p>
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tieneQR)}`}
-                    alt="QR WhatsApp" className="mx-auto rounded" width={160} height={160} />
+                <div className="mb-3 p-3 bg-gray-50 rounded-lg text-center border border-gray-200">
+                  <p className="text-xs text-gray-500 mb-2 font-medium">
+                    Abre WhatsApp → Dispositivos vinculados → Vincular dispositivo
+                  </p>
+                  {/* Usamos la API de QR server con el string de Baileys */}
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tieneQR)}&bgcolor=ffffff&color=000000&margin=10`}
+                    alt="QR WhatsApp"
+                    className="mx-auto rounded border"
+                    width={180}
+                    height={180}
+                    onError={(e) => {
+                      // Si falla el servicio externo, mostrar el string crudo
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <p className="text-xs text-gray-400 mt-2">Expira en ~60 segundos — recarga si no funciona</p>
                   <button onClick={() => setQrs(prev => ({ ...prev, [t.id]: null }))}
-                    className="mt-2 text-xs text-gray-400 hover:text-gray-600">Cerrar QR</button>
+                    className="mt-1 text-xs text-gray-400 hover:text-gray-600 underline">Cerrar</button>
                 </div>
               )}
 

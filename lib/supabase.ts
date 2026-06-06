@@ -62,6 +62,7 @@ export interface WaSession {
   numero_telefono: string;
   estado: 'conectado' | 'esperando_qr' | 'desconectado';
   auth_data: Record<string, unknown> | null;
+  qr_actual: string | null;
   ultimo_ping: string | null;
   created_at: string;
 }
