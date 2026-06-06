@@ -321,7 +321,23 @@ export default function ConfiguracionPage() {
                 <p className="text-xs text-gray-400 italic">Los grupos se sincronizarán automáticamente cuando el bot-service esté conectado</p>
               )}
 
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={async () => {
+                    if (!BOT_URL) { setMensaje('BOT_SERVICE_URL no configurada'); return; }
+                    try {
+                      const res = await fetch(`${BOT_URL}/api/trigger/${t.id}/forzar`, {
+                        method: 'POST', headers: { 'x-bot-secret': BOT_SECRET },
+                      });
+                      const data = await res.json();
+                      setMensaje(data.ok ? '▶ Ciclo disparado — revisa el grupo en ~30s' : data.error);
+                    } catch { setMensaje('No se pudo contactar el bot-service'); }
+                    setTimeout(() => setMensaje(''), 4000);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  ▶ Probar ahora
+                </button>
                 <button onClick={() => guardarConfig(t.id)} disabled={guardando === t.id}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
                   <Save className="w-4 h-4" />
