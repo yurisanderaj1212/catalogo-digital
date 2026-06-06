@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, Tienda, SchedulerConfig, WaGrupo } from '@/lib/supabase';
-import { Save, AlertTriangle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Save, AlertTriangle, ToggleLeft, ToggleRight, RefreshCw, Loader } from 'lucide-react';
 
 interface TiendaConConfig extends Tienda {
   config: SchedulerConfig | null;
   grupos: WaGrupo[];
 }
+
+const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
+const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
 
 const defaultConfig = {
   activo: false,
@@ -25,6 +28,7 @@ export default function ConfiguracionPage() {
   const [formStates, setFormStates] = useState<Record<string, typeof defaultConfig>>({});
   const [pausaGlobal, setPausaGlobal] = useState(false);
   const [aplicandoPausa, setAplicandoPausa] = useState(false);
+  const [sincronizando, setSincronizando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState('');
 
   useEffect(() => { fetchData(); }, []);
@@ -111,6 +115,28 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const sincronizarGrupos = async (tiendaId: string) => {
+    if (!BOT_URL) { setMensaje('BOT_SERVICE_URL no configurada'); return; }
+    setSincronizando(tiendaId);
+    try {
+      const res = await fetch(`${BOT_URL}/api/grupos/${tiendaId}`, {
+        headers: { 'x-bot-secret': BOT_SECRET },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMensaje(`${data.grupos.length} grupos sincronizados`);
+        await fetchData();
+      } else {
+        setMensaje(data.error ?? 'Error al sincronizar');
+      }
+    } catch {
+      setMensaje('No se pudo contactar el bot-service');
+    } finally {
+      setSincronizando(null);
+      setTimeout(() => setMensaje(''), 3000);
+    }
+  };
+
   const update = (tiendaId: string, field: string, value: unknown) => {
     setFormStates((prev) => ({ ...prev, [tiendaId]: { ...prev[tiendaId], [field]: value } }));
   };
@@ -152,13 +178,23 @@ export default function ConfiguracionPage() {
             {/* Header tienda */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
               <h3 className="font-bold text-gray-900">{t.nombre}</h3>
-              <button
-                onClick={() => update(t.id, 'activo', !form.activo)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${form.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
-              >
-                {form.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                {form.activo ? 'Activo' : 'Inactivo'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => sincronizarGrupos(t.id)}
+                  disabled={sincronizando === t.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-300 disabled:opacity-50 transition-colors"
+                >
+                  {sincronizando === t.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Sincronizar grupos
+                </button>
+                <button
+                  onClick={() => update(t.id, 'activo', !form.activo)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${form.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+                >
+                  {form.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                  {form.activo ? 'Activo' : 'Inactivo'}
+                </button>
+              </div>
             </div>
 
             <div className="p-5 space-y-4">
