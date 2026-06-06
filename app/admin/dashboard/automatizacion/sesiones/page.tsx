@@ -56,13 +56,21 @@ export default function SesionesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Polling del estado cada 10s cuando alguna sesión está esperando QR
+  // Supabase Realtime — actualiza automáticamente cuando cambia wa_sessions
   useEffect(() => {
-    const hayEsperandoQR = tiendas.some(t => t.session?.estado === 'esperando_qr');
-    if (!hayEsperandoQR) return;
-    const interval = setInterval(fetchData, 10_000);
-    return () => clearInterval(interval);
-  }, [tiendas, fetchData]);
+    const channel = supabase
+      .channel('wa-sessions-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'wa_sessions',
+      }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
 
   const guardarSesion = async (tiendaId: string) => {
     if (!telefono.trim()) return;
