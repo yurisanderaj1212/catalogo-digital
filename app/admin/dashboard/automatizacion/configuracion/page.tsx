@@ -203,7 +203,10 @@ export default function ConfiguracionPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Intervalo (horas)</label>
                   <input type="number" min={1} max={24} value={form.intervalo_horas}
-                    onChange={(e) => update(t.id, 'intervalo_horas', parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value);
+                      if (!isNaN(v)) update(t.id, 'intervalo_horas', v);
+                    }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
                 {/* Hora inicio */}
@@ -224,7 +227,10 @@ export default function ConfiguracionPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Productos/ciclo</label>
                   <input type="number" min={1} max={20} value={form.productos_por_ciclo}
-                    onChange={(e) => update(t.id, 'productos_por_ciclo', parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value);
+                      if (!isNaN(v)) update(t.id, 'productos_por_ciclo', v);
+                    }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
