@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase, WaSession, SchedulerConfig, MensajeLog, Tienda } from '@/lib/supabase';
-import { Wifi, WifiOff, Clock, CheckCircle, XCircle, AlertCircle, Send, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, Clock, CheckCircle, XCircle, AlertCircle, Send, RefreshCw, Bot, Activity } from 'lucide-react';
+
+const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
+const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
 
 interface TiendaConEstado extends Tienda {
   session: WaSession | null;
@@ -14,20 +17,47 @@ interface MensajeConNombres extends MensajeLog {
   producto_nombre?: string;
 }
 
+interface BotStatus {
+  ok: boolean;
+  sesiones: Record<string, string>; // tiendaId → 'conectado'|'desconectado'
+  jobs_activos: string[];           // tiendaIds con cron activo
+}
+
+// Convierte hora UTC a hora Cuba (UTC-5)
+function utcALocal(horaUtc: string): string {
+  const [h, m] = horaUtc.split(':').map(Number);
+  const hLocal = (h - 5 + 24) % 24;
+  return `${String(hLocal).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export default function AutomatizacionPage() {
   const [tiendas, setTiendas] = useState<TiendaConEstado[]>([]);
   const [ultimosMensajes, setUltimosMensajes] = useState<MensajeConNombres[]>([]);
   const [pendientes, setPendientes] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
+  const [botOnline, setBotOnline] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    fetchData();
-    // Refrescar cada 30 segundos
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+  const fetchBotStatus = useCallback(async () => {
+    if (!BOT_URL) return;
+    try {
+      const res = await fetch(`${BOT_URL}/api/status`, {
+        headers: { 'x-bot-secret': BOT_SECRET },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBotStatus(data);
+        setBotOnline(true);
+      } else {
+        setBotOnline(false);
+      }
+    } catch {
+      setBotOnline(false);
+    }
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [tiendasRes, sessionsRes, schedulersRes, mensajesRes, pendientesRes] = await Promise.all([
         supabase.from('tiendas').select('*').eq('activa', true).order('nombre'),
@@ -42,28 +72,30 @@ export default function AutomatizacionPage() {
       const sessions = sessionsRes.data || [];
       const schedulers = schedulersRes.data || [];
 
-      const tiendasConEstado: TiendaConEstado[] = tiendasData.map((t) => ({
+      setTiendas(tiendasData.map((t) => ({
         ...t,
-        session: sessions.find((s) => s.tienda_id === t.id) ?? null,
-        scheduler: schedulers.find((s) => s.tienda_id === t.id) ?? null,
-      }));
-
-      setTiendas(tiendasConEstado);
+        session: sessions.find((s: WaSession) => s.tienda_id === t.id) ?? null,
+        scheduler: schedulers.find((s: SchedulerConfig) => s.tienda_id === t.id) ?? null,
+      })));
       setPendientes(pendientesRes.count ?? 0);
-
-      // Mapear nombres en mensajes
-      const msgs = (mensajesRes.data || []).map((m: any) => ({
+      setUltimosMensajes((mensajesRes.data || []).map((m: any) => ({
         ...m,
         tienda_nombre: m.tiendas?.nombre ?? '—',
         producto_nombre: m.productos?.nombre ?? '—',
-      }));
-      setUltimosMensajes(msgs);
+      })));
     } catch (err) {
       console.error('Error:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    fetchBotStatus();
+    const interval = setInterval(() => { fetchData(); fetchBotStatus(); }, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchData, fetchBotStatus]);
 
   const estadoColor = (estado: string | undefined) => {
     if (estado === 'conectado') return 'text-green-600 bg-green-50 border-green-200';
@@ -89,85 +121,129 @@ export default function AutomatizacionPage() {
     return <Clock className="w-4 h-4 text-yellow-500" />;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center h-48">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
+
+      {/* Estado del bot-service */}
+      <div className={`flex items-center justify-between p-4 rounded-xl border ${
+        botOnline === null ? 'bg-gray-50 border-gray-200' :
+        botOnline ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+      }`}>
+        <div className="flex items-center gap-3">
+          <Bot className={`w-5 h-5 ${botOnline ? 'text-green-600' : botOnline === false ? 'text-red-600' : 'text-gray-400'}`} />
+          <div>
+            <p className={`text-sm font-semibold ${botOnline ? 'text-green-800' : botOnline === false ? 'text-red-800' : 'text-gray-600'}`}>
+              Bot-service: {botOnline === null ? 'Verificando...' : botOnline ? 'En línea' : 'Fuera de línea'}
+            </p>
+            {botStatus && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {botStatus.jobs_activos.length} scheduler{botStatus.jobs_activos.length !== 1 ? 's' : ''} activo{botStatus.jobs_activos.length !== 1 ? 's' : ''}
+                {' · '}
+                {Object.values(botStatus.sesiones).filter(s => s === 'conectado').length} sesión{Object.values(botStatus.sesiones).filter(s => s === 'conectado').length !== 1 ? 'es' : ''} WA conectada{Object.values(botStatus.sesiones).filter(s => s === 'conectado').length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {botStatus && (
+            <div className="flex gap-1">
+              {botStatus.jobs_activos.map((id) => {
+                const tienda = tiendas.find(t => t.id === id);
+                return (
+                  <span key={id} className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                    <Activity className="w-3 h-3" />
+                    {tienda?.nombre ?? id.slice(0, 8)}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <button onClick={() => { fetchData(); fetchBotStatus(); }}
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-white">
+            <RefreshCw className="w-3 h-3" /> Actualizar
+          </button>
+        </div>
+      </div>
 
       {/* Alertas pendientes */}
       {pendientes > 0 && (
         <div className="flex items-center gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
           <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-yellow-800">
-              {pendientes} cambio{pendientes > 1 ? 's' : ''} de precio pendiente{pendientes > 1 ? 's' : ''} de aprobación
-            </p>
-          </div>
-          <a href="/admin/dashboard/automatizacion/precios" className="text-xs font-medium text-yellow-700 hover:underline">
-            Revisar →
-          </a>
+          <p className="text-sm font-semibold text-yellow-800 flex-1">
+            {pendientes} cambio{pendientes > 1 ? 's' : ''} de precio pendiente{pendientes > 1 ? 's' : ''} de aprobación
+          </p>
+          <a href="/admin/dashboard/automatizacion/precios" className="text-xs font-medium text-yellow-700 hover:underline">Revisar →</a>
         </div>
       )}
 
       {/* Estado de sesiones por tienda */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Estado de conexiones</h2>
-          <button onClick={fetchData} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-            <RefreshCw className="w-3 h-3" /> Actualizar
-          </button>
-        </div>
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Estado de conexiones</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {tiendas.map((t) => (
-            <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="font-semibold text-gray-900 text-sm">{t.nombre}</h3>
-                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${estadoColor(t.session?.estado)}`}>
-                  {estadoIcon(t.session?.estado)}
-                  {estadoLabel(t.session?.estado)}
-                </span>
+          {tiendas.map((t) => {
+            // Estado real del socket en el bot-service (si está disponible)
+            const estadoBot = botStatus?.sesiones[t.id];
+            const estadoReal = estadoBot ?? t.session?.estado;
+            const jobActivo = botStatus?.jobs_activos.includes(t.id) ?? false;
+
+            return (
+              <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900 text-sm">{t.nombre}</h3>
+                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${estadoColor(estadoReal)}`}>
+                    {estadoIcon(estadoReal)}
+                    {estadoLabel(estadoReal)}
+                  </span>
+                </div>
+
+                {t.session?.numero_telefono && (
+                  <p className="text-xs text-gray-500 mb-2">📱 {t.session.numero_telefono}</p>
+                )}
+
+                {/* Scheduler — estado real del bot */}
+                <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
+                  jobActivo ? 'bg-green-50 text-green-700' :
+                  t.scheduler?.activo ? 'bg-yellow-50 text-yellow-700' :
+                  'bg-gray-50 text-gray-500'
+                }`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${
+                    jobActivo ? 'bg-green-500 animate-pulse' :
+                    t.scheduler?.activo ? 'bg-yellow-400' :
+                    'bg-gray-400'
+                  }`} />
+                  {jobActivo
+                    ? `Scheduler corriendo — cada ${t.scheduler?.intervalo_horas}h`
+                    : t.scheduler?.activo
+                    ? 'Scheduler activo (reiniciando...)'
+                    : 'Scheduler inactivo'}
+                </div>
+
+                {t.scheduler?.activo && t.scheduler.hora_inicio && (
+                  <p className="text-xs text-gray-400 mt-1 pl-1">
+                    🕐 {utcALocal(t.scheduler.hora_inicio.slice(0, 5))} – {utcALocal(t.scheduler.hora_fin?.slice(0, 5) ?? '01:00')} (hora Cuba)
+                  </p>
+                )}
+
+                <a href="/admin/dashboard/automatizacion/sesiones"
+                  className="block mt-3 text-center text-xs text-blue-600 hover:underline">
+                  {estadoReal === 'conectado' ? 'Ver sesión' : 'Conectar →'}
+                </a>
               </div>
-
-              {t.session?.numero_telefono && (
-                <p className="text-xs text-gray-500 mb-2">📱 {t.session.numero_telefono}</p>
-              )}
-
-              {/* Scheduler status */}
-              <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${t.scheduler?.activo ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${t.scheduler?.activo ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                {t.scheduler?.activo
-                  ? `Scheduler activo — cada ${t.scheduler.intervalo_horas}h`
-                  : 'Scheduler inactivo'}
-              </div>
-
-              {t.scheduler?.activo && t.scheduler.hora_inicio && (
-                <p className="text-xs text-gray-400 mt-1 pl-1">
-                  🕐 {t.scheduler.hora_inicio.slice(0, 5)} – {t.scheduler.hora_fin?.slice(0, 5)}
-                </p>
-              )}
-
-              <a
-                href="/admin/dashboard/automatizacion/sesiones"
-                className="block mt-3 text-center text-xs text-blue-600 hover:underline"
-              >
-                {t.session?.estado === 'conectado' ? 'Ver sesión' : 'Conectar →'}
-              </a>
-            </div>
-          ))}
-
+            );
+          })}
           {tiendas.length === 0 && (
             <p className="col-span-3 text-center text-sm text-gray-400 py-8">No hay tiendas activas</p>
           )}
         </div>
       </div>
 
-      {/* Últimos mensajes enviados */}
+      {/* Últimos envíos */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Últimos envíos</h2>
@@ -203,7 +279,7 @@ export default function AutomatizacionPage() {
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-400 hidden sm:table-cell">
-                      {m.created_at ? new Date(m.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      {m.created_at ? new Date(m.created_at).toLocaleString('es-CU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                   </tr>
                 ))}
