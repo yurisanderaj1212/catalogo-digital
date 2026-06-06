@@ -112,11 +112,27 @@ Desplegado como nuevo Web Service en Render.
 ---
 
 ## Estado actual
-- [x] Catálogo digital funcionando
+- [x] Catálogo digital funcionando en catalogo.perezlazos.com
 - [x] productos_tiendas implementado
 - [x] Categorías dinámicas por tienda
-- [ ] Columnas tipo_venta en productos
-- [ ] Tablas WA en Supabase
-- [ ] ModalProducto actualizado
-- [ ] Vista tienda actualizada con tipos de venta
-- [ ] Módulo automatización
+- [x] Pills auto-scroll con IntersectionObserver
+- [x] Layout por secciones de categoría
+- [x] Columnas tipo_venta en productos (SQL ejecutado)
+- [x] Tablas WA en Supabase (ejecutado)
+- [x] Tipos TypeScript actualizados
+- [x] ModalProducto actualizado con tipo_venta
+- [x] Vista tienda actualizada con tipos de venta
+- [x] Módulo automatización completo (5 páginas)
+- [x] Bot-service deployado en Render (Starter)
+- [x] Redis en Upstash conectado
+- [x] Baileys v7 conectado con useSupabaseAuthState
+- [x] QR funcional desde el panel
+- [x] Scheduler con horas fijas UTC + soporte cruce medianoche
+- [x] Conversión UTC-Cuba en el panel
+- [x] MessageBuilder con descripción del producto
+- [x] Políticas RLS completas para todas las tablas WA
+- [x] Dashboard con estado real del bot via /api/status
+- [x] Cambio de precios con fuzzy match funcionando
+- [x] Dominio catalogo.perezlazos.com activo con SSL
+- [ ] Registrar 3 números dedicados del cliente (warm-up 7 días)
+- [ ] Configurar tipo_venta en productos existentes
