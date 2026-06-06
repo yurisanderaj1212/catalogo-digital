@@ -250,13 +250,34 @@ export default function ConfiguracionPage() {
               {/* Grupos de esta tienda */}
               {t.grupos.length > 0 && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-2">Grupos activos ({t.grupos.filter(g => g.activo).length}/{t.grupos.length})</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-gray-600">
+                      Grupos ({t.grupos.filter(g => g.activo).length} activos / {t.grupos.length} total)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Buscar grupo..."
+                      className="text-xs px-2 py-1 border border-gray-300 rounded-lg w-40 focus:ring-1 focus:ring-blue-500"
+                      onChange={(e) => {
+                        const val = e.target.value.toLowerCase();
+                        const filtered = document.querySelectorAll(`[data-tienda="${t.id}"] .grupo-item`);
+                        filtered.forEach((el) => {
+                          const nombre = el.getAttribute('data-nombre') ?? '';
+                          (el as HTMLElement).style.display = nombre.includes(val) ? '' : 'none';
+                        });
+                      }}
+                    />
+                  </div>
+                  <div data-tienda={t.id} className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
                     {t.grupos.map((g) => (
-                      <button key={g.id} onClick={() => toggleGrupo(g)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-colors ${g.activo ? 'border-green-200 bg-green-50 text-green-800' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
-                        <span className="truncate text-left">{g.nombre || g.grupo_jid}</span>
-                        <span className={`ml-2 text-xs shrink-0 ${g.activo ? 'text-green-600' : 'text-gray-400'}`}>
+                      <button
+                        key={g.id}
+                        data-nombre={(g.nombre || g.grupo_jid).toLowerCase()}
+                        className={`grupo-item flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-colors ${g.activo ? 'border-green-200 bg-green-50 text-green-800' : 'border-gray-200 bg-gray-50 text-gray-500'}`}
+                        onClick={() => toggleGrupo(g)}
+                      >
+                        <span className="truncate text-left text-xs">{g.nombre || g.grupo_jid}</span>
+                        <span className={`ml-2 text-xs shrink-0 font-medium ${g.activo ? 'text-green-600' : 'text-gray-400'}`}>
                           {g.activo ? 'ON' : 'OFF'}
                         </span>
                       </button>
