@@ -12,6 +12,23 @@ interface TiendaConConfig extends Tienda {
 const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
 const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
 
+// Cuba = UTC-5 (sin cambio de horario de verano)
+const OFFSET_HORAS = -5;
+
+/** Convierte hora local Cuba "HH:MM" a UTC "HH:MM" para guardar en DB */
+function localAUtc(horaLocal: string): string {
+  const [h, m] = horaLocal.split(':').map(Number);
+  let hUtc = (h - OFFSET_HORAS + 24) % 24;
+  return `${String(hUtc).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Convierte hora UTC "HH:MM" de DB a hora local Cuba "HH:MM" para mostrar */
+function utcALocal(horaUtc: string): string {
+  const [h, m] = horaUtc.split(':').map(Number);
+  let hLocal = (h + OFFSET_HORAS + 24) % 24;
+  return `${String(hLocal).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 const defaultConfig = {
   activo: false,
   intervalo_horas: 4,
@@ -58,8 +75,9 @@ export default function ConfiguracionPage() {
         initial[t.id] = t.config ? {
           activo: t.config.activo,
           intervalo_horas: t.config.intervalo_horas,
-          hora_inicio: t.config.hora_inicio?.slice(0, 5) ?? '08:00',
-          hora_fin: t.config.hora_fin?.slice(0, 5) ?? '20:00',
+          // Convertir UTC de DB a hora local Cuba para mostrar en el panel
+          hora_inicio: utcALocal(t.config.hora_inicio?.slice(0, 5) ?? '13:00'),
+          hora_fin: utcALocal(t.config.hora_fin?.slice(0, 5) ?? '01:00'),
           productos_por_ciclo: t.config.productos_por_ciclo,
           modo_seleccion: t.config.modo_seleccion as 'rotacion' | 'aleatorio' | 'manual',
         } : { ...defaultConfig };
@@ -80,10 +98,17 @@ export default function ConfiguracionPage() {
     const form = formStates[tiendaId];
     const tienda = tiendas.find((t) => t.id === tiendaId);
     try {
+      // Convertir horas locales Cuba a UTC antes de guardar en DB
+      const dataToSave = {
+        ...form,
+        hora_inicio: localAUtc(form.hora_inicio),
+        hora_fin: localAUtc(form.hora_fin),
+        updated_at: new Date().toISOString(),
+      };
       if (tienda?.config) {
-        await supabase.from('scheduler_config').update({ ...form, updated_at: new Date().toISOString() }).eq('tienda_id', tiendaId);
+        await supabase.from('scheduler_config').update(dataToSave).eq('tienda_id', tiendaId);
       } else {
-        await supabase.from('scheduler_config').insert({ tienda_id: tiendaId, ...form });
+        await supabase.from('scheduler_config').insert({ tienda_id: tiendaId, ...dataToSave });
       }
       setMensaje('Configuración guardada');
       await fetchData();
@@ -211,14 +236,14 @@ export default function ConfiguracionPage() {
                 </div>
                 {/* Hora inicio */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora inicio</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora inicio (Cuba)</label>
                   <input type="time" value={form.hora_inicio}
                     onChange={(e) => update(t.id, 'hora_inicio', e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
                 {/* Hora fin */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora fin</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora fin (Cuba)</label>
                   <input type="time" value={form.hora_fin}
                     onChange={(e) => update(t.id, 'hora_fin', e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
