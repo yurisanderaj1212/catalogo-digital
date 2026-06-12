@@ -407,6 +407,13 @@ export default function TiendaPage() {
                               <p className="text-sm font-bold text-blue-600">${Math.round(producto.precio_por_libra).toLocaleString('es-CU')} {producto.moneda}/lb</p>
                             )}
                           </div>
+                        ) : producto.tipo_venta === 'paquete' ? (
+                          <div>
+                            {producto.unidades_por_caja && (
+                              <p className="text-xs text-gray-500">Paquete x{producto.unidades_por_caja}u</p>
+                            )}
+                            <p className="text-base font-bold text-blue-600">${producto.precio.toLocaleString('es-CU')} <span className="text-xs">{producto.moneda}</span></p>
+                          </div>
                         ) : (
                           <p className="text-base font-bold text-blue-600">
                             ${producto.precio.toLocaleString('es-CU')} <span className="text-xs">{producto.moneda}</span>
@@ -495,6 +502,14 @@ export default function TiendaPage() {
                           {(productoSeleccionado.unidad_peso === 'lb' || productoSeleccionado.unidad_peso === 'ambos') && productoSeleccionado.precio_por_libra && (
                             <p className="text-xl font-bold text-blue-700">${Math.round(productoSeleccionado.precio_por_libra).toLocaleString('es-CU')} <span className="text-sm font-medium">{productoSeleccionado.moneda}/lb</span></p>
                           )}
+                        </div>
+                      ) : productoSeleccionado.tipo_venta === 'paquete' ? (
+                        <div>
+                          {productoSeleccionado.unidades_por_caja && (
+                            <p className="text-sm text-blue-500">Paquete x{productoSeleccionado.unidades_por_caja} unidades</p>
+                          )}
+                          <span className="text-2xl font-bold text-blue-700">${productoSeleccionado.precio.toLocaleString('es-CU')}</span>
+                          <span className="text-sm text-blue-600 font-medium ml-1">{productoSeleccionado.moneda}</span>
                         </div>
                       ) : (
                         <div className="flex items-baseline gap-2">

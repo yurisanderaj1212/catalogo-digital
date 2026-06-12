@@ -373,9 +373,9 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                 onChange={(e) => setFormData({ ...formData, unidades_por_caja: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Ej: 50" />
-              {formData.precio && formData.unidades_por_caja && (
+              {formData.tipo_venta === 'unidad_caja' && formData.precio && formData.unidades_por_caja && (
                 <p className="text-xs text-blue-600 mt-1 font-medium">
-                  {formData.tipo_venta === 'paquete' ? 'Precio paquete' : 'Precio caja'}: ${(parseFloat(formData.precio) * parseInt(formData.unidades_por_caja)).toLocaleString('es-CU')} {formData.moneda}
+                  Precio caja: ${(parseFloat(formData.precio) * parseInt(formData.unidades_por_caja)).toLocaleString('es-CU')} {formData.moneda}
                 </p>
               )}
             </div>
