@@ -49,7 +49,7 @@ export interface Producto {
   categoria_id: string | null; // UUID
   fecha_creacion: string;
   // Campos para automatización WA
-  tipo_venta: 'unidad_caja' | 'unidad_sola' | 'carnico' | 'granel';
+  tipo_venta: 'unidad_caja' | 'unidad_sola' | 'carnico' | 'paquete';
   unidades_por_caja: number | null;
   precio_caja: number | null;      // GENERATED: precio * unidades_por_caja
   unidad_peso: 'kg' | 'lb' | 'ambos' | null;

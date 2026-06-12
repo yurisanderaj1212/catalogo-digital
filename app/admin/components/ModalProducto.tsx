@@ -22,7 +22,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     categoria_id: '',
     disponible: true,
     activo: true,
-    tipo_venta: 'unidad_sola' as 'unidad_caja' | 'unidad_sola' | 'carnico' | 'granel',
+    tipo_venta: 'unidad_sola' as 'unidad_caja' | 'unidad_sola' | 'carnico' | 'paquete',
     unidades_por_caja: '' as string,
     unidad_peso: '' as 'kg' | 'lb' | 'ambos' | '',
   });
@@ -350,7 +350,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de venta</label>
             <div className="grid grid-cols-2 gap-2">
-              {(['unidad_sola', 'unidad_caja', 'carnico', 'granel'] as const).map((tipo) => (
+              {(['unidad_sola', 'unidad_caja', 'carnico', 'paquete'] as const).map((tipo) => (
                 <label key={tipo} className={`flex items-center gap-2 p-2 border rounded-lg cursor-pointer transition-colors ${formData.tipo_venta === tipo ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'}`}>
                   <input type="radio" name="tipo_venta" value={tipo} checked={formData.tipo_venta === tipo}
                     onChange={() => setFormData({ ...formData, tipo_venta: tipo, unidades_por_caja: '', unidad_peso: '' })}
@@ -379,7 +379,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
             </div>
           )}
 
-          {(formData.tipo_venta === 'carnico' || formData.tipo_venta === 'granel') && (
+          {(formData.tipo_venta === 'carnico' || formData.tipo_venta === 'paquete') && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Unidad de peso</label>
               <div className="flex gap-3">
