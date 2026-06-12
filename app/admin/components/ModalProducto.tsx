@@ -382,6 +382,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
           )}
 
           {formData.tipo_venta === 'carnico' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Unidad de peso</label>
               <div className="flex gap-3">
                 {(['kg', 'lb', 'ambos'] as const).map((u) => (
                   <label key={u} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg cursor-pointer transition-colors ${formData.unidad_peso === u ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'}`}>
@@ -392,9 +394,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                   </label>
                 ))}
               </div>
-              {formData.tipo_venta === 'carnico' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Unidad de peso</label>
+              {formData.precio && (
                 <div className="mt-2 space-y-0.5">
                   {(formData.unidad_peso === 'kg' || formData.unidad_peso === 'ambos') && (
                     <p className="text-xs text-blue-600 font-medium">Precio/kg: ${parseFloat(formData.precio).toLocaleString('es-CU')} {formData.moneda}</p>
