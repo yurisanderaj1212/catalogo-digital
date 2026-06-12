@@ -356,7 +356,7 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                     onChange={() => setFormData({ ...formData, tipo_venta: tipo, unidades_por_caja: '', unidad_peso: '' })}
                     className="w-4 h-4 text-blue-600" />
                   <span className="text-sm font-medium text-gray-700 capitalize">
-                    {tipo === 'unidad_sola' ? 'Unidad sola' : tipo === 'unidad_caja' ? 'Unidad + caja' : tipo === 'carnico' ? 'Cárnico' : 'Granel'}
+                    {tipo === 'unidad_sola' ? 'Unidad sola' : tipo === 'unidad_caja' ? 'Unidad + caja' : tipo === 'carnico' ? 'Cárnico' : 'Paquete'}
                   </span>
                 </label>
               ))}
@@ -364,24 +364,24 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
           </div>
 
           {/* Campos condicionales según tipo_venta */}
-          {formData.tipo_venta === 'unidad_caja' && (
+          {(formData.tipo_venta === 'unidad_caja' || formData.tipo_venta === 'paquete') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por caja</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {formData.tipo_venta === 'paquete' ? 'Unidades por paquete' : 'Unidades por caja'}
+              </label>
               <input type="number" min="1" value={formData.unidades_por_caja}
                 onChange={(e) => setFormData({ ...formData, unidades_por_caja: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ej: 24" />
+                placeholder="Ej: 50" />
               {formData.precio && formData.unidades_por_caja && (
                 <p className="text-xs text-blue-600 mt-1 font-medium">
-                  Precio caja: ${(parseFloat(formData.precio) * parseInt(formData.unidades_por_caja)).toLocaleString('es-CU')} {formData.moneda}
+                  {formData.tipo_venta === 'paquete' ? 'Precio paquete' : 'Precio caja'}: ${(parseFloat(formData.precio) * parseInt(formData.unidades_por_caja)).toLocaleString('es-CU')} {formData.moneda}
                 </p>
               )}
             </div>
           )}
 
-          {(formData.tipo_venta === 'carnico' || formData.tipo_venta === 'paquete') && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Unidad de peso</label>
+          {formData.tipo_venta === 'carnico' && (
               <div className="flex gap-3">
                 {(['kg', 'lb', 'ambos'] as const).map((u) => (
                   <label key={u} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg cursor-pointer transition-colors ${formData.unidad_peso === u ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'}`}>
@@ -392,7 +392,9 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                   </label>
                 ))}
               </div>
-              {formData.tipo_venta === 'carnico' && formData.precio && (
+              {formData.tipo_venta === 'carnico' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Unidad de peso</label>
                 <div className="mt-2 space-y-0.5">
                   {(formData.unidad_peso === 'kg' || formData.unidad_peso === 'ambos') && (
                     <p className="text-xs text-blue-600 font-medium">Precio/kg: ${parseFloat(formData.precio).toLocaleString('es-CU')} {formData.moneda}</p>
