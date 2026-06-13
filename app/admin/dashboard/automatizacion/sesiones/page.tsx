@@ -254,6 +254,17 @@ export default function SesionesPage() {
                     </button>
                   )}
 
+                  {t.session?.estado === 'conectado' && (
+                    <button onClick={async () => {
+                      if (!confirm('¿Desconectar y limpiar esta sesión?')) return;
+                      await llamarBot(`/api/sesiones/${t.id}/desconectar`, 'POST');
+                      await fetchData();
+                    }}
+                      className="w-full py-2 bg-red-50 text-red-700 text-sm rounded-lg hover:bg-red-100 border border-red-200 transition-colors">
+                      Desconectar sesión
+                    </button>
+                  )}
+
                   {t.session?.estado === 'esperando_qr' && (
                     <button onClick={() => pedirQR(t.id)}
                       className="w-full py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 transition-colors">
