@@ -21,34 +21,53 @@ async function llamarBot(path: string, body?: object) {
 
 interface ParseResult {
   texto_original: string;
-  producto_encontrado: Producto | null;
-  confianza: number;
-  precio_anterior: number | null;
   precio_nuevo: number;
-  aplicar: boolean;
+  // Múltiples candidatos por línea — el admin elige cuáles aplicar
+  candidatos: {
+    producto: Producto;
+    confianza: number;
+    precio_anterior: number;
+    aplicar: boolean;
+    key: string; // unique key = linea_index + producto_id
+  }[];
 }
 
+// Devuelve hasta 3 candidatos por línea ordenados por confianza
 function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
   const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean);
   const resultados: ParseResult[] = [];
-  for (const linea of lineas) {
+
+  for (let li = 0; li < lineas.length; li++) {
+    const linea = lineas[li];
     const match = linea.match(/^(.+?)[\s\-:]+(\d+(?:[.,]\d+)?)\s*(?:cup|usd|eur)?$/i);
     if (!match) continue;
+
     const nombreBuscado = match[1].trim().toLowerCase();
     const precioNuevo = parseFloat(match[2].replace(',', '.'));
-    let mejorProducto: Producto | null = null;
-    let mejorScore = 0;
-    for (const p of productos) {
-      const score = calcularSimilitud(nombreBuscado, p.nombre.toLowerCase());
-      if (score > mejorScore) { mejorScore = score; mejorProducto = p; }
+
+    // Calcular score para todos los productos y tomar los top 3 con score >= 50%
+    const scores = productos
+      .map(p => ({ producto: p, score: calcularSimilitud(nombreBuscado, p.nombre.toLowerCase()) }))
+      .filter(x => x.score >= 0.5)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    if (scores.length === 0) {
+      // Sin coincidencias — igual mostramos la línea como no encontrada
+      resultados.push({ texto_original: linea, precio_nuevo: precioNuevo, candidatos: [] });
+      continue;
     }
+
     resultados.push({
       texto_original: linea,
-      producto_encontrado: mejorProducto,
-      confianza: Math.round(mejorScore * 100),
-      precio_anterior: mejorProducto?.precio ?? null,
       precio_nuevo: precioNuevo,
-      aplicar: mejorScore >= 0.8,
+      candidatos: scores.map(({ producto, score }) => ({
+        producto,
+        confianza: Math.round(score * 100),
+        precio_anterior: producto.precio,
+        aplicar: score >= 0.8, // auto-seleccionar solo los de alta confianza
+        key: `${li}_${producto.id}`,
+      })),
     });
   }
   return resultados;
@@ -101,19 +120,34 @@ export default function PreciosPage() {
     setTimeout(() => { setResultados(parsearTexto(texto, productos)); setAnalizando(false); }, 300);
   };
 
-  const toggleAplicar = (index: number) => {
-    setResultados(prev => prev.map((r, i) => i === index ? { ...r, aplicar: !r.aplicar } : r));
+  const toggleAplicar = (key: string) => {
+    setResultados(prev => prev.map(r => ({
+      ...r,
+      candidatos: r.candidatos.map(c => c.key === key ? { ...c, aplicar: !c.aplicar } : c),
+    })));
   };
 
   const aplicarCambios = async () => {
-    const aAplicar = resultados.filter(r => r.aplicar && r.producto_encontrado && r.confianza >= 60);
+    const aAplicar = resultados.flatMap(r =>
+      r.candidatos.filter(c => c.aplicar && c.confianza >= 60).map(c => ({
+        producto: c.producto,
+        precio_nuevo: r.precio_nuevo,
+        precio_anterior: c.precio_anterior,
+      }))
+    );
     if (aAplicar.length === 0) return;
     setAplicando(true);
     try {
-      for (const r of aAplicar) {
-        if (!r.producto_encontrado) continue;
-        await supabase.from('productos').update({ precio: r.precio_nuevo }).eq('id', r.producto_encontrado.id);
-        await supabase.from('price_change_log').insert({ producto_id: r.producto_encontrado.id, tipo: 'precio', valor_anterior: String(r.precio_anterior), valor_nuevo: String(r.precio_nuevo), estado: 'aprobado', publicado_wa: false });
+      for (const item of aAplicar) {
+        await supabase.from('productos').update({ precio: item.precio_nuevo }).eq('id', item.producto.id);
+        await supabase.from('price_change_log').insert({
+          producto_id: item.producto.id,
+          tipo: 'precio',
+          valor_anterior: String(item.precio_anterior),
+          valor_nuevo: String(item.precio_nuevo),
+          estado: 'aprobado',
+          publicado_wa: false,
+        });
       }
       mostrarMensaje(`Precios actualizados: ${aAplicar.length}`);
       setTexto(''); setResultados([]);
@@ -218,33 +252,59 @@ export default function PreciosPage() {
       {resultados.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h2 className="text-sm font-semibold text-gray-700">{resultados.filter(r => r.aplicar).length} seleccionados</h2>
-            <button onClick={aplicarCambios} disabled={aplicando || !resultados.some(r => r.aplicar)}
+            <h2 className="text-sm font-semibold text-gray-700">
+              {resultados.flatMap(r => r.candidatos.filter(c => c.aplicar)).length} seleccionados para aplicar
+            </h2>
+            <button onClick={aplicarCambios} disabled={aplicando || !resultados.some(r => r.candidatos.some(c => c.aplicar))}
               className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50">
               {aplicando ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
               {aplicando ? 'Aplicando...' : 'Aplicar seleccionados'}
             </button>
           </div>
           <div className="divide-y divide-gray-100">
-            {resultados.map((r, i) => {
-              const cfg = confianzaConfig(r.confianza);
-              return (
-                <div key={i} className={`flex items-center gap-3 px-5 py-3 ${r.confianza < 60 ? 'opacity-60' : ''}`}>
-                  <input type="checkbox" checked={r.aplicar && r.confianza >= 60} disabled={r.confianza < 60} onChange={() => toggleAplicar(i)} className="w-4 h-4 text-blue-600 rounded" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-400 truncate">{r.texto_original}</p>
-                    <p className="text-sm font-medium text-gray-900 truncate">{r.producto_encontrado?.nombre ?? 'No encontrado'}</p>
+            {resultados.map((r, ri) => (
+              <div key={ri} className="px-5 py-3">
+                {/* Texto original */}
+                <p className="text-xs text-gray-400 mb-2 font-mono">{r.texto_original}</p>
+
+                {r.candidatos.length === 0 ? (
+                  <div className="flex items-center gap-2 text-sm text-red-500">
+                    <XCircle className="w-4 h-4" />
+                    <span>No se encontraron productos</span>
                   </div>
-                  <div className="text-right shrink-0">
-                    {r.precio_anterior !== null && <p className="text-xs text-gray-400 line-through">{r.precio_anterior}</p>}
-                    <p className="text-sm font-bold text-gray-900">{r.precio_nuevo}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {r.candidatos.map((c) => {
+                      const cfg = c.confianza >= 80
+                        ? 'text-green-700 bg-green-50 border-green-200'
+                        : c.confianza >= 60
+                        ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
+                        : 'text-red-700 bg-red-50 border-red-200';
+                      const icon = c.confianza >= 80 ? <CheckCircle className="w-3.5 h-3.5" />
+                        : c.confianza >= 60 ? <AlertCircle className="w-3.5 h-3.5" />
+                        : <XCircle className="w-3.5 h-3.5" />;
+                      return (
+                        <div key={c.key} className={`flex items-center gap-3 p-2 rounded-lg border ${c.aplicar ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <input type="checkbox" checked={c.aplicar} disabled={c.confianza < 60}
+                            onChange={() => toggleAplicar(c.key)} className="w-4 h-4 text-blue-600 rounded" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{c.producto.nombre}</p>
+                            <p className="text-xs text-gray-400">{c.producto.moneda}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs text-gray-400 line-through">{c.precio_anterior.toLocaleString('es-CU')}</p>
+                            <p className="text-sm font-bold text-gray-900">{r.precio_nuevo.toLocaleString('es-CU')}</p>
+                          </div>
+                          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${cfg}`}>
+                            {icon} {c.confianza}%
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${cfg.cls}`}>
-                    {cfg.icon} {r.confianza}%
-                  </span>
-                </div>
-              );
-            })}
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
