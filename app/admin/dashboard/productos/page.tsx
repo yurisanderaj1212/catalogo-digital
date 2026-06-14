@@ -92,7 +92,8 @@ export default function ProductosPage() {
 
   const productosFiltrados = productos.filter((producto) => {
     const matchBusqueda = producto.nombre.toLowerCase().includes(busqueda.toLowerCase());
-    const matchTienda = !tiendaFiltro || producto.tienda_id === tiendaFiltro;
+    // Filtrar por tienda usando productos_tiendas (no tienda_id deprecated)
+    const matchTienda = !tiendaFiltro || (producto.tiendas && producto.tiendas.some(t => t.id === tiendaFiltro));
     const matchCategoria = !categoriaFiltro || producto.categoria_id === categoriaFiltro;
     return matchBusqueda && matchTienda && matchCategoria;
   });
