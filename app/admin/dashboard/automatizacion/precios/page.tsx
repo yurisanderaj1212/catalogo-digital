@@ -32,7 +32,7 @@ interface ParseResult {
   }[];
 }
 
-// Devuelve hasta 3 candidatos por línea ordenados por confianza
+// Devuelve candidatos: exactos primero, luego fuzzy si no hay exactos
 function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
   const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean);
   const resultados: ParseResult[] = [];
@@ -45,18 +45,31 @@ function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
     const nombreBuscado = match[1].trim().toLowerCase();
     const precioNuevo = parseFloat(match[2].replace(',', '.'));
 
-    // Calcular score para todos los productos y tomar los top 3 con score >= 50%
+    // Primero: buscar coincidencias exactas (mismo nombre ignorando mayúsculas)
+    const exactos = productos.filter(p => p.nombre.toLowerCase() === nombreBuscado);
+
+    if (exactos.length > 0) {
+      // Hay 1 o más productos con nombre idéntico → mostrar todos auto-seleccionados
+      resultados.push({
+        texto_original: linea,
+        precio_nuevo: precioNuevo,
+        candidatos: exactos.map(p => ({
+          producto: p,
+          confianza: 100,
+          precio_anterior: p.precio,
+          aplicar: true, // todos seleccionados por defecto
+          key: `${li}_${p.id}`,
+        })),
+      });
+      continue;
+    }
+
+    // No hay exactos: usar fuzzy match, mostrar solo el mejor candidato
     const scores = productos
       .map(p => ({ producto: p, score: calcularSimilitud(nombreBuscado, p.nombre.toLowerCase()) }))
       .filter(x => x.score >= 0.5)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-
-    if (scores.length === 0) {
-      // Sin coincidencias — igual mostramos la línea como no encontrada
-      resultados.push({ texto_original: linea, precio_nuevo: precioNuevo, candidatos: [] });
-      continue;
-    }
+      .slice(0, 1); // solo el mejor
 
     resultados.push({
       texto_original: linea,
@@ -65,7 +78,7 @@ function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
         producto,
         confianza: Math.round(score * 100),
         precio_anterior: producto.precio,
-        aplicar: score >= 0.8, // auto-seleccionar solo los de alta confianza
+        aplicar: score >= 0.8,
         key: `${li}_${producto.id}`,
       })),
     });
