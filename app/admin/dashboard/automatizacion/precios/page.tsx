@@ -45,8 +45,8 @@ function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
     const nombreBuscado = match[1].trim().toLowerCase();
     const precioNuevo = parseFloat(match[2].replace(',', '.'));
 
-    // Primero: buscar coincidencias exactas (mismo nombre ignorando mayúsculas)
-    const exactos = productos.filter(p => p.nombre.toLowerCase() === nombreBuscado);
+    // Primero: buscar coincidencias exactas (mismo nombre ignorando mayúsculas y tildes)
+    const exactos = productos.filter(p => normalizar(p.nombre) === normalizar(nombreBuscado));
 
     if (exactos.length > 0) {
       // Hay 1 o más productos con nombre idéntico → mostrar todos auto-seleccionados
@@ -86,9 +86,23 @@ function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
   return resultados;
 }
 
+// Normaliza texto: quita acentos, convierte a minúsculas, elimina caracteres especiales
+function normalizar(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize('NFD') // descompone caracteres con acento en carácter base + diacrítico
+    .replace(/[\u0300-\u036f]/g, '') // elimina los diacríticos (tildes, diéresis, etc.)
+    .replace(/[^a-z0-9\s]/g, ' ') // reemplaza caracteres especiales por espacio
+    .replace(/\s+/g, ' ') // colapsa espacios múltiples
+    .trim();
+}
+
 function calcularSimilitud(a: string, b: string): number {
-  const tokensA = new Set(a.split(/\s+/));
-  const tokensB = new Set(b.split(/\s+/));
+  // Normalizar ambos antes de comparar
+  const na = normalizar(a);
+  const nb = normalizar(b);
+  const tokensA = new Set(na.split(/\s+/));
+  const tokensB = new Set(nb.split(/\s+/));
   const intersection = [...tokensA].filter(t => tokensB.has(t)).length;
   const union = new Set([...tokensA, ...tokensB]).size;
   if (union === 0) return 0;
