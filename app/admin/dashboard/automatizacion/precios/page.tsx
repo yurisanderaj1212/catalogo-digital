@@ -177,9 +177,16 @@ export default function PreciosPage() {
   const borrarYRepublicar = async (tiendaId: string, republicar: boolean) => {
     setBorrandoTienda(tiendaId);
     const res = await llamarBot(`/api/borrar-y-republicar/${tiendaId}`, { republicar });
-    if (res?.ok) mostrarMensaje(`${res.borrados} mensajes borrados${republicar ? ` + ${res.productos_a_republicar} productos a republicar` : ''}`);
-    else mostrarMensaje('Error al borrar mensajes');
-    setBorrandoTienda(null);
+    if (res?.ok) {
+      const tiempoMin = res.total ? Math.ceil((res.total * 1.5) / 60) : null;
+      const tiempoTxt = tiempoMin ? ` (~${tiempoMin} min)` : '';
+      mostrarMensaje(`${res.mensaje}${tiempoTxt}`);
+      // Mantener spinner durante el proceso — se limpia tras 15 min máx
+      setTimeout(() => setBorrandoTienda(null), 15 * 60 * 1000);
+    } else {
+      mostrarMensaje(res?.mensaje ?? res?.error ?? 'Error al borrar mensajes');
+      setBorrandoTienda(null);
+    }
   };
 
   const buscarProductosAgotados = () => {
@@ -337,14 +344,19 @@ export default function PreciosPage() {
                 <button onClick={() => borrarYRepublicar(t.id, false)} disabled={borrandoTienda === t.id}
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 text-red-700 text-xs rounded-lg hover:bg-red-100 disabled:opacity-50 border border-red-200">
                   {borrandoTienda === t.id ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                  Solo borrar
+                  {borrandoTienda === t.id ? 'En progreso...' : 'Solo borrar'}
                 </button>
                 <button onClick={() => borrarYRepublicar(t.id, true)} disabled={borrandoTienda === t.id}
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-50 text-blue-700 text-xs rounded-lg hover:bg-blue-100 disabled:opacity-50 border border-blue-200">
                   {borrandoTienda === t.id ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  Borrar + republicar
+                  {borrandoTienda === t.id ? 'En progreso...' : 'Borrar + republicar'}
                 </button>
               </div>
+              {borrandoTienda === t.id && (
+                <p className="text-xs text-amber-600 mt-2 text-center bg-amber-50 rounded p-1">
+                  ⏳ Borrando en background — puede tardar varios minutos. No cierres esta página.
+                </p>
+              )}
             </div>
           ))}
         </div>
