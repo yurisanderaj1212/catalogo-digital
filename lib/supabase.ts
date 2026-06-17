@@ -29,9 +29,7 @@ export interface Tienda {
   hora_cierre: string | null; // Formato: "17:00:00" (TIME)
   dias_laborales: string[] | null; // ["lunes", "martes", "miercoles", "jueves", "viernes"]
   // Mensaje de bienvenida (primer mensaje de cada ciclo WA)
-  mensaje_bienvenida_linea1: string | null;
-  mensaje_bienvenida_linea2: string | null;
-  mensaje_bienvenida_linea3: string | null;
+  mensaje_bienvenida: string | null;
 }
 
 export interface Categoria {

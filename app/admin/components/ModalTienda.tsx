@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Tienda, GrupoWhatsApp } from '@/lib/supabase';
 import { validarHorarios, validarDiasLaborales } from '@/lib/validators';
-import { X, Clock, MessageSquare } from 'lucide-react';
+import { X, Clock } from 'lucide-react';
 import GruposWhatsAppManager from './GruposWhatsAppManager';
 
 interface ModalTiendaProps {
@@ -26,9 +26,6 @@ export default function ModalTienda({ tienda, onClose, onSuccess }: ModalTiendaP
     hora_apertura: '',
     hora_cierre: '',
     dias_laborales: [] as string[],
-    mensaje_bienvenida_linea1: '',
-    mensaje_bienvenida_linea2: '',
-    mensaje_bienvenida_linea3: '',
   });
   const [grupos, setGrupos] = useState<GrupoWhatsApp[]>([]);
   const [loading, setLoading] = useState(false);
@@ -203,9 +200,6 @@ export default function ModalTienda({ tienda, onClose, onSuccess }: ModalTiendaP
         hora_apertura: formData.hora_apertura || null,
         hora_cierre: formData.hora_cierre || null,
         dias_laborales: formData.dias_laborales.length > 0 ? formData.dias_laborales : null,
-        mensaje_bienvenida_linea1: formData.mensaje_bienvenida_linea1 || null,
-        mensaje_bienvenida_linea2: formData.mensaje_bienvenida_linea2 || null,
-        mensaje_bienvenida_linea3: formData.mensaje_bienvenida_linea3 || null,
       };
 
       let tiendaId: string;
@@ -538,68 +532,6 @@ export default function ModalTienda({ tienda, onClose, onSuccess }: ModalTiendaP
           {/* Sección de Grupos de WhatsApp */}
           <div className="border-t pt-4 mt-6">
             <GruposWhatsAppManager grupos={grupos} onChange={setGrupos} />
-          </div>
-
-          {/* Sección Mensaje de Bienvenida */}
-          <div className="border-t pt-4 mt-6">
-            <div className="flex items-center gap-2 mb-1">
-              <MessageSquare className="w-5 h-5 text-gray-600" />
-              <h3 className="text-base font-semibold text-gray-900">Mensaje de Bienvenida</h3>
-            </div>
-            <p className="text-xs text-gray-500 mb-4">
-              Se envía como primer mensaje al inicio de cada ciclo de publicación en WhatsApp.
-            </p>
-
-            <div className="space-y-3 bg-gray-50 rounded-lg p-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Línea 1
-                </label>
-                <input
-                  type="text"
-                  value={formData.mensaje_bienvenida_linea1}
-                  onChange={(e) => setFormData({ ...formData, mensaje_bienvenida_linea1: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: 🏪 Tienda La Esperanza"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Línea 2
-                </label>
-                <input
-                  type="text"
-                  value={formData.mensaje_bienvenida_linea2}
-                  onChange={(e) => setFormData({ ...formData, mensaje_bienvenida_linea2: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: 📦 Ofertas del día"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Línea 3
-                </label>
-                <input
-                  type="text"
-                  value={formData.mensaje_bienvenida_linea3}
-                  onChange={(e) => setFormData({ ...formData, mensaje_bienvenida_linea3: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: 📞 Contacto: +53 5555 5555"
-                />
-              </div>
-
-              {/* Preview del mensaje */}
-              {(formData.mensaje_bienvenida_linea1 || formData.mensaje_bienvenida_linea2 || formData.mensaje_bienvenida_linea3) && (
-                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-lg">
-                  <p className="text-xs text-gray-400 mb-2 font-medium">Vista previa:</p>
-                  <div className="text-sm text-gray-800 whitespace-pre-line font-mono bg-green-50 p-2 rounded border border-green-100">
-                    {[formData.mensaje_bienvenida_linea1, formData.mensaje_bienvenida_linea2, formData.mensaje_bienvenida_linea3]
-                      .filter(Boolean)
-                      .join('\n')}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="flex items-center gap-2">

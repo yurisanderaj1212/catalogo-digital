@@ -1,11 +1,15 @@
--- Migración: agregar campos de mensaje de bienvenida a la tabla tiendas
+-- Migración: agregar campo mensaje_bienvenida a la tabla tiendas
 -- Este mensaje se envía como primera publicación en cada ciclo del bot
+-- Si ya corriste la versión anterior con 3 columnas, esta migración las consolida en una sola
 
+-- Eliminar columnas anteriores si existen (versión previa con 3 campos)
 ALTER TABLE tiendas
-  ADD COLUMN IF NOT EXISTS mensaje_bienvenida_linea1 TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS mensaje_bienvenida_linea2 TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS mensaje_bienvenida_linea3 TEXT DEFAULT NULL;
+  DROP COLUMN IF EXISTS mensaje_bienvenida_linea1,
+  DROP COLUMN IF EXISTS mensaje_bienvenida_linea2,
+  DROP COLUMN IF EXISTS mensaje_bienvenida_linea3;
 
-COMMENT ON COLUMN tiendas.mensaje_bienvenida_linea1 IS 'Primera línea del mensaje de bienvenida (ej: nombre de la tienda / encabezado)';
-COMMENT ON COLUMN tiendas.mensaje_bienvenida_linea2 IS 'Segunda línea del mensaje de bienvenida (ej: descripción / eslogan)';
-COMMENT ON COLUMN tiendas.mensaje_bienvenida_linea3 IS 'Tercera línea del mensaje de bienvenida (ej: contacto / cierre)';
+-- Agregar columna única de texto libre
+ALTER TABLE tiendas
+  ADD COLUMN IF NOT EXISTS mensaje_bienvenida TEXT DEFAULT NULL;
+
+COMMENT ON COLUMN tiendas.mensaje_bienvenida IS 'Mensaje de bienvenida enviado como primer mensaje de cada ciclo WA. Texto libre, soporta saltos de línea y emojis.';
