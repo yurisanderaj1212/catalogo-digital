@@ -49,9 +49,6 @@ export default function ModalTienda({ tienda, onClose, onSuccess }: ModalTiendaP
         hora_apertura: tienda.hora_apertura || '',
         hora_cierre: tienda.hora_cierre || '',
         dias_laborales: tienda.dias_laborales || [],
-        mensaje_bienvenida_linea1: tienda.mensaje_bienvenida_linea1 || '',
-        mensaje_bienvenida_linea2: tienda.mensaje_bienvenida_linea2 || '',
-        mensaje_bienvenida_linea3: tienda.mensaje_bienvenida_linea3 || '',
       });
       
       // Establecer preview del logo existente
