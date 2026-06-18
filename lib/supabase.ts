@@ -67,6 +67,7 @@ export interface WaSession {
   qr_actual: string | null;
   ultimo_ping: string | null;
   created_at: string;
+  sesion_maestra_id: string | null; // si está configurado, usa el socket de esa sesión
 }
 
 export interface WaGrupo {
