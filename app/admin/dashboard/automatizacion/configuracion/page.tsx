@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, Tienda, SchedulerConfig, WaGrupo } from '@/lib/supabase';
-import { Save, AlertTriangle, ToggleLeft, ToggleRight, RefreshCw, Loader } from 'lucide-react';
+import { Save, AlertTriangle, ToggleLeft, ToggleRight, RefreshCw, Loader, Trash2, X } from 'lucide-react';
 
 interface TiendaConConfig extends Tienda {
   config: SchedulerConfig | null;
@@ -48,6 +48,7 @@ export default function ConfiguracionPage() {
   const [sincronizando, setSincronizando] = useState<string | null>(null);
   const [limpiando, setLimpiando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState('');
+  const [modalLimpiar, setModalLimpiar] = useState<{ id: string; nombre: string } | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -163,33 +164,41 @@ export default function ConfiguracionPage() {
     }
   };
 
-  const limpiarYSincronizarGrupos = async (tiendaId: string, nombreTienda: string) => {
-    if (!confirm(`¿Eliminar todos los grupos de ${nombreTienda} y re-sincronizar desde el número actual? Los grupos activos se desactivarán.`)) return;
+  const confirmarLimpiar = async () => {
+    if (!modalLimpiar) return;
+    const { id: tiendaId } = modalLimpiar;
+    setModalLimpiar(null);
     if (!BOT_URL) { setMensaje('BOT_SERVICE_URL no configurada'); return; }
     setLimpiando(tiendaId);
     try {
-      // 1. Borrar todos los grupos de esta tienda en BD
-      const { error } = await supabase.from('wa_grupos').delete().eq('tienda_id', tiendaId);
-      if (error) throw error;
-
-      // 2. Re-sincronizar desde el número actual
-      const res = await fetch(`${BOT_URL}/api/grupos/${tiendaId}`, {
+      // 1. Borrar todos los grupos via bot-service (service_role bypasea RLS)
+      const delRes = await fetch(`${BOT_URL}/api/grupos/${tiendaId}`, {
+        method: 'DELETE',
         headers: { 'x-bot-secret': BOT_SECRET },
       });
-      const data = await res.json();
+      if (!delRes.ok) throw new Error('Error al borrar grupos en el bot');
+
+      // 2. Re-sincronizar desde el número actual
+      const syncRes = await fetch(`${BOT_URL}/api/grupos/${tiendaId}`, {
+        headers: { 'x-bot-secret': BOT_SECRET },
+      });
+      const data = await syncRes.json();
       if (data.ok) {
         setMensaje(`Limpieza completa — ${data.grupos.length} grupos del número actual`);
-        await fetchData();
       } else {
         setMensaje(data.error ?? 'Limpiado pero error al re-sincronizar');
-        await fetchData();
       }
+      await fetchData();
     } catch (err: any) {
       setMensaje(`Error: ${err.message}`);
     } finally {
       setLimpiando(null);
       setTimeout(() => setMensaje(''), 4000);
     }
+  };
+
+  const limpiarYSincronizarGrupos = (tiendaId: string, nombreTienda: string) => {
+    setModalLimpiar({ id: tiendaId, nombre: nombreTienda });
   };
 
   const update = (tiendaId: string, field: string, value: unknown) => {
@@ -204,6 +213,39 @@ export default function ConfiguracionPage() {
       {mensaje && (
         <div className="fixed top-20 right-4 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
           {mensaje}
+        </div>
+      )}
+
+      {/* Modal confirmar limpieza */}
+      {modalLimpiar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-red-700">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-semibold">Limpiar grupos</h3>
+              </div>
+              <button onClick={() => setModalLimpiar(null)} className="p-1 hover:bg-gray-100 rounded-full">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-700 mb-2">
+              Se eliminarán <strong>todos los grupos</strong> de <strong>{modalLimpiar.nombre}</strong> y se re-sincronizarán desde el número actual.
+            </p>
+            <p className="text-xs text-gray-500 mb-5">
+              Los grupos que tengas activos quedarán desactivados. Tendrás que volver a activarlos después.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setModalLimpiar(null)}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button onClick={confirmarLimpiar}
+                className="flex-1 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">
+                Sí, limpiar y re-sincronizar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
