@@ -121,11 +121,14 @@ export default function SesionesPage() {
         await supabase.from('wa_sessions').update({
           sesion_maestra_id: sesionMaestra.id,
           estado: 'desconectado',
+          auth_data: null,      // limpiar credenciales propias
+          qr_actual: null,      // limpiar QR pendiente
+          numero_telefono: '',  // sin número propio
         }).eq('id', existing.id);
       } else {
         await supabase.from('wa_sessions').insert({
           tienda_id: tiendaId,
-          numero_telefono: sesionMaestra.numero_telefono,
+          numero_telefono: '',
           estado: 'desconectado',
           sesion_maestra_id: sesionMaestra.id,
         });
