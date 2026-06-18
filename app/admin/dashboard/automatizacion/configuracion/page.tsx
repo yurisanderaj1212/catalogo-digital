@@ -46,6 +46,7 @@ export default function ConfiguracionPage() {
   const [pausaGlobal, setPausaGlobal] = useState(false);
   const [aplicandoPausa, setAplicandoPausa] = useState(false);
   const [sincronizando, setSincronizando] = useState<string | null>(null);
+  const [limpiando, setLimpiando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState('');
 
   useEffect(() => { fetchData(); }, []);
@@ -162,6 +163,35 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const limpiarYSincronizarGrupos = async (tiendaId: string, nombreTienda: string) => {
+    if (!confirm(`¿Eliminar todos los grupos de ${nombreTienda} y re-sincronizar desde el número actual? Los grupos activos se desactivarán.`)) return;
+    if (!BOT_URL) { setMensaje('BOT_SERVICE_URL no configurada'); return; }
+    setLimpiando(tiendaId);
+    try {
+      // 1. Borrar todos los grupos de esta tienda en BD
+      const { error } = await supabase.from('wa_grupos').delete().eq('tienda_id', tiendaId);
+      if (error) throw error;
+
+      // 2. Re-sincronizar desde el número actual
+      const res = await fetch(`${BOT_URL}/api/grupos/${tiendaId}`, {
+        headers: { 'x-bot-secret': BOT_SECRET },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMensaje(`Limpieza completa — ${data.grupos.length} grupos del número actual`);
+        await fetchData();
+      } else {
+        setMensaje(data.error ?? 'Limpiado pero error al re-sincronizar');
+        await fetchData();
+      }
+    } catch (err: any) {
+      setMensaje(`Error: ${err.message}`);
+    } finally {
+      setLimpiando(null);
+      setTimeout(() => setMensaje(''), 4000);
+    }
+  };
+
   const update = (tiendaId: string, field: string, value: unknown) => {
     setFormStates((prev) => ({ ...prev, [tiendaId]: { ...prev[tiendaId], [field]: value } }));
   };
@@ -205,8 +235,16 @@ export default function ConfiguracionPage() {
               <h3 className="font-bold text-gray-900">{t.nombre}</h3>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => limpiarYSincronizarGrupos(t.id, t.nombre)}
+                  disabled={limpiando === t.id || sincronizando === t.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 disabled:opacity-50 transition-colors"
+                >
+                  {limpiando === t.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Limpiar grupos
+                </button>
+                <button
                   onClick={() => sincronizarGrupos(t.id)}
-                  disabled={sincronizando === t.id}
+                  disabled={sincronizando === t.id || limpiando === t.id}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-300 disabled:opacity-50 transition-colors"
                 >
                   {sincronizando === t.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
