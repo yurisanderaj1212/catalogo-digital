@@ -187,9 +187,17 @@ export default function AutomatizacionPage() {
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Estado de conexiones</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {tiendas.map((t) => {
-            // Estado real del socket en el bot-service (si está disponible)
-            const estadoBot = botStatus?.sesiones[t.id];
-            const estadoReal = estadoBot ?? t.session?.estado;
+            // Para sesiones delegadas, usar el estado de la tienda maestra
+            const esDelegada = !!t.session?.sesion_maestra_id;
+            const tiendaMaestra = esDelegada
+              ? tiendas.find(m => m.session?.id === t.session?.sesion_maestra_id)
+              : null;
+
+            // Estado real: bot > maestra (si delegada) > propio
+            const estadoBot = botStatus?.sesiones[t.id]
+              ?? (tiendaMaestra ? botStatus?.sesiones[tiendaMaestra.id] : undefined);
+            const estadoReal = estadoBot
+              ?? (tiendaMaestra ? tiendaMaestra.session?.estado : t.session?.estado);
             const jobActivo = botStatus?.jobs_activos.includes(t.id) ?? false;
 
             return (
@@ -202,9 +210,12 @@ export default function AutomatizacionPage() {
                   </span>
                 </div>
 
-                {t.session?.numero_telefono && (
+                {/* Mostrar número — propio o el de la maestra */}
+                {esDelegada && tiendaMaestra?.session?.numero_telefono ? (
+                  <p className="text-xs text-blue-600 mb-2">🔗 vía {tiendaMaestra.nombre} · {tiendaMaestra.session.numero_telefono}</p>
+                ) : t.session?.numero_telefono ? (
                   <p className="text-xs text-gray-500 mb-2">📱 {t.session.numero_telefono}</p>
-                )}
+                ) : null}
 
                 {/* Scheduler — estado real del bot */}
                 <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
