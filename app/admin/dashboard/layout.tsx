@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { Home, Package, Store, Tag, LogOut, Menu, X, Users, Bot } from 'lucide-react';
+import { Home, Package, Store, Tag, LogOut, Menu, X, Users, Bot, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -46,6 +46,7 @@ export default function DashboardLayout({
     { icon: Package, label: 'Productos', href: '/admin/dashboard/productos' },
     { icon: Users, label: 'Administradores', href: '/admin/dashboard/administradores' },
     { icon: Bot, label: 'Automatización WA', href: '/admin/dashboard/automatizacion' },
+    { icon: BarChart2, label: 'Reportes', href: '/admin/dashboard/reportes' },
   ];
 
   return (
