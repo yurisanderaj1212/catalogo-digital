@@ -2,7 +2,22 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, TrendingUp, Package, CheckCircle, XCircle, Clock, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Send, TrendingUp, Package, CheckCircle, XCircle, Clock, Search, Filter, ChevronLeft, ChevronRight, FileText, Printer } from 'lucide-react';
+
+interface ProductoPDF {
+  nombre: string;
+  precio: number;
+  moneda: string;
+  disponible: boolean;
+  tipo_venta: string;
+  categoria: string | null;
+}
+
+interface TiendaPDF {
+  id: string;
+  nombre: string;
+  productos: ProductoPDF[];
+}
 
 interface ResumenTienda {
   id: string;
@@ -32,6 +47,9 @@ export default function ReportesPage() {
   const [fechaHasta, setFechaHasta] = useState('');
   const [paginaPrecios, setPaginaPrecios] = useState(0);
   const POR_PAGINA = 20;
+
+  // ── PDF de inventario ──
+  const [generandoPDF, setGenerandoPDF] = useState<string | null>(null);
 
   useEffect(() => {
     fetchResumen();
@@ -74,6 +92,101 @@ export default function ReportesPage() {
   useEffect(() => {
     fetchPrecios();
   }, [fetchPrecios]);
+
+  const generarPDF = async (tiendaId: string, tiendaNombre: string) => {
+    setGenerandoPDF(tiendaId);
+    try {
+      const { data: relaciones } = await supabase
+        .from('productos_tiendas')
+        .select('producto_id')
+        .eq('tienda_id', tiendaId);
+
+      if (!relaciones || relaciones.length === 0) {
+        alert('Esta tienda no tiene productos asignados');
+        return;
+      }
+
+      const ids = relaciones.map((r: any) => r.producto_id);
+
+      const { data: productos } = await supabase
+        .from('productos')
+        .select('nombre, precio, moneda, disponible, tipo_venta, categorias:categoria_id(nombre)')
+        .in('id', ids)
+        .eq('activo', true)
+        .order('nombre');
+
+      if (!productos || productos.length === 0) {
+        alert('No hay productos activos en esta tienda');
+        return;
+      }
+
+      const fecha = new Date().toLocaleDateString('es-CU', { day: '2-digit', month: 'long', year: 'numeric' });
+      const fmt = (n: number) => new Intl.NumberFormat('es-CU').format(Math.round(n));
+
+      const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Inventario ${tiendaNombre}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20px; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .meta { font-size: 11px; color: #666; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th { background: #1e40af; color: white; padding: 6px 8px; text-align: left; font-size: 10px; }
+    td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .disponible { color: #16a34a; font-weight: bold; }
+    .agotado { color: #dc2626; font-weight: bold; }
+    .footer { margin-top: 20px; font-size: 10px; color: #9ca3af; text-align: right; }
+    @media print { body { padding: 10px; } button { display: none; } }
+  </style>
+</head>
+<body>
+  <h1>Inventario de Productos — ${tiendaNombre}</h1>
+  <p class="meta">Generado el ${fecha} · ${productos.length} productos activos</p>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Producto</th>
+        <th>Categoría</th>
+        <th>Tipo</th>
+        <th>Precio</th>
+        <th>Moneda</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${productos.map((p: any, i: number) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${p.nombre}</td>
+          <td>${(p.categorias as any)?.nombre ?? '—'}</td>
+          <td>${p.tipo_venta ?? '—'}</td>
+          <td style="text-align:right">${fmt(p.precio)}</td>
+          <td>${p.moneda}</td>
+          <td class="${p.disponible ? 'disponible' : 'agotado'}">${p.disponible ? 'Disponible' : 'Agotado'}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>
+  <p class="footer">${productos.filter((p: any) => p.disponible).length} disponibles · ${productos.filter((p: any) => !p.disponible).length} agotados</p>
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+
+      const ventana = window.open('', '_blank');
+      if (ventana) {
+        ventana.document.write(html);
+        ventana.document.close();
+      }
+    } catch (err) {
+      console.error('Error generando PDF:', err);
+    } finally {
+      setGenerandoPDF(null);
+    }
+  };
 
   const fetchResumen = async () => {
     setLoading(true);
@@ -372,15 +485,53 @@ export default function ReportesPage() {
         </div>
       </div>
 
+      {/* PDF de inventario */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-4">PDF de inventario por tienda</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {resumen?.tiendas.map((t) => (
+            <div key={t.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">{t.nombre}</h3>
+                  <p className="text-xs text-gray-400">{t.totalProductos} productos activos</p>
+                </div>
+              </div>
+              <div className="space-y-1 mb-4 text-xs text-gray-500">
+                <div className="flex justify-between">
+                  <span className="text-green-600">Disponibles</span>
+                  <span className="font-medium text-green-700">{t.productosDisponibles}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-red-500">Agotados</span>
+                  <span className="font-medium text-red-600">{t.productosAgotados}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => generarPDF(t.id, t.nombre)}
+                disabled={generandoPDF === t.id}
+                className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {generandoPDF === t.id
+                  ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generando...</>
+                  : <><Printer className="w-3.5 h-3.5" /> Generar PDF</>
+                }
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Próximamente */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-50 pointer-events-none">
-        {['PDF de inventario', 'Limpieza de historial'].map((s) => (
-          <div key={s} className="bg-white rounded-xl border border-dashed border-gray-300 p-5 text-center">
-            <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">{s}</p>
-            <p className="text-xs text-gray-300 mt-1">Próximamente</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 md:grid-cols-1 gap-4 opacity-50 pointer-events-none">
+        <div className="bg-white rounded-xl border border-dashed border-gray-300 p-5 text-center">
+          <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">Limpieza de historial</p>
+          <p className="text-xs text-gray-300 mt-1">Próximamente</p>
+        </div>
       </div>
     </div>
   );
