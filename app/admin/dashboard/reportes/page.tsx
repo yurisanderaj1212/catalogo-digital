@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, TrendingUp, Package, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Send, TrendingUp, Package, CheckCircle, XCircle, Clock, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ResumenTienda {
   id: string;
@@ -24,9 +24,56 @@ export default function ReportesPage() {
   const [resumen, setResumen] = useState<ResumenGeneral | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ── Historial de precios ──
+  const [precios, setPrecios] = useState<any[]>([]);
+  const [loadingPrecios, setLoadingPrecios] = useState(false);
+  const [busquedaProducto, setBusquedaProducto] = useState('');
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+  const [paginaPrecios, setPaginaPrecios] = useState(0);
+  const POR_PAGINA = 20;
+
   useEffect(() => {
     fetchResumen();
   }, []);
+
+  const fetchPrecios = useCallback(async () => {
+    setLoadingPrecios(true);
+    try {
+      let query = supabase
+        .from('price_change_log')
+        .select('*, productos(nombre, tienda_id, tiendas:tienda_id(nombre))', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(paginaPrecios * POR_PAGINA, (paginaPrecios + 1) * POR_PAGINA - 1);
+
+      if (fechaDesde) query = query.gte('created_at', fechaDesde);
+      if (fechaHasta) query = query.lte('created_at', fechaHasta + 'T23:59:59');
+
+      const { data } = await query;
+      let resultado = (data || []).map((r: any) => ({
+        ...r,
+        producto_nombre: r.productos?.nombre ?? '—',
+        tienda_nombre: r.productos?.tiendas?.nombre ?? '—',
+      }));
+
+      // Filtro por nombre en frontend (más flexible)
+      if (busquedaProducto.trim()) {
+        resultado = resultado.filter((r: any) =>
+          r.producto_nombre.toLowerCase().includes(busquedaProducto.toLowerCase())
+        );
+      }
+
+      setPrecios(resultado);
+    } catch (err) {
+      console.error('Error:', err);
+    } finally {
+      setLoadingPrecios(false);
+    }
+  }, [paginaPrecios, fechaDesde, fechaHasta, busquedaProducto]);
+
+  useEffect(() => {
+    fetchPrecios();
+  }, [fetchPrecios]);
 
   const fetchResumen = async () => {
     setLoading(true);
@@ -213,9 +260,121 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      {/* Próximamente — resto de secciones */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-50 pointer-events-none">
-        {['Historial de precios', 'PDF de inventario', 'Limpieza de historial'].map((s) => (
+      {/* Historial de cambios de precio */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-4">Historial de cambios de precio</h2>
+
+        {/* Filtros */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre de producto..."
+              value={busquedaProducto}
+              onChange={(e) => { setBusquedaProducto(e.target.value); setPaginaPrecios(0); }}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+            <input
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => { setFechaDesde(e.target.value); setPaginaPrecios(0); }}
+              className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-400">hasta</span>
+            <input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => { setFechaHasta(e.target.value); setPaginaPrecios(0); }}
+              className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            {(fechaDesde || fechaHasta || busquedaProducto) && (
+              <button
+                onClick={() => { setFechaDesde(''); setFechaHasta(''); setBusquedaProducto(''); setPaginaPrecios(0); }}
+                className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {loadingPrecios ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          ) : precios.length === 0 ? (
+            <div className="flex flex-col items-center py-12 text-gray-400">
+              <TrendingUp className="w-8 h-8 mb-2" />
+              <p className="text-sm">No hay cambios de precio registrados</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Producto</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 hidden md:table-cell">Tienda</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Anterior</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Nuevo</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 hidden sm:table-cell">Estado</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Fecha</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {precios.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5 font-medium text-gray-900 truncate max-w-[160px]">{p.producto_nombre}</td>
+                    <td className="px-4 py-2.5 text-gray-500 text-xs hidden md:table-cell">{p.tienda_nombre}</td>
+                    <td className="px-4 py-2.5 text-gray-400 line-through text-xs">{p.valor_anterior ?? '—'}</td>
+                    <td className="px-4 py-2.5 font-semibold text-gray-900 text-xs">{p.valor_nuevo ?? '—'}</td>
+                    <td className="px-4 py-2.5 hidden sm:table-cell">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        p.estado === 'aprobado' ? 'bg-green-100 text-green-700' :
+                        p.estado === 'rechazado' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {p.estado}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">
+                      {new Date(p.created_at).toLocaleString('es-CU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* Paginación */}
+          {!loadingPrecios && precios.length > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+              <button
+                onClick={() => setPaginaPrecios(p => Math.max(0, p - 1))}
+                disabled={paginaPrecios === 0}
+                className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-40 px-2 py-1 rounded hover:bg-gray-100"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Anterior
+              </button>
+              <span className="text-xs text-gray-400">Página {paginaPrecios + 1}</span>
+              <button
+                onClick={() => setPaginaPrecios(p => p + 1)}
+                disabled={precios.length < POR_PAGINA}
+                className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-40 px-2 py-1 rounded hover:bg-gray-100"
+              >
+                Siguiente <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Próximamente */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-50 pointer-events-none">
+        {['PDF de inventario', 'Limpieza de historial'].map((s) => (
           <div key={s} className="bg-white rounded-xl border border-dashed border-gray-300 p-5 text-center">
             <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
             <p className="text-sm text-gray-400">{s}</p>
