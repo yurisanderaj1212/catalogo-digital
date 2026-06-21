@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, TrendingUp, Package, CheckCircle, XCircle, Clock, Search, Filter, ChevronLeft, ChevronRight, FileText, Printer } from 'lucide-react';
+import { Send, TrendingUp, Package, CheckCircle, XCircle, Search, Filter, ChevronLeft, ChevronRight, FileText, Printer } from 'lucide-react';
 
 interface ProductoPDF {
   nombre: string;
@@ -50,6 +50,13 @@ export default function ReportesPage() {
 
   // ── PDF de inventario ──
   const [generandoPDF, setGenerandoPDF] = useState<string | null>(null);
+
+  // ── Limpieza de historial ──
+  const [periodoLimpiar, setPeriodoLimpiar] = useState<'1mes' | '3meses' | '6meses' | 'personalizado'>('3meses');
+  const [fechaLimpiarHasta, setFechaLimpiarHasta] = useState('');
+  const [limpiando, setLimpiando] = useState(false);
+  const [modalLimpiar, setModalLimpiar] = useState(false);
+  const [conteoLimpiar, setConteoLimpiar] = useState<{ mensajes: number; precios: number } | null>(null);
 
   useEffect(() => {
     fetchResumen();
@@ -247,6 +254,45 @@ export default function ReportesPage() {
       ? Math.round(((resumen.mensajesEsteMes - resumen.mensajesMesAnterior) / resumen.mensajesMesAnterior) * 100)
       : 0
     : 0;
+
+  const getFechaCorte = (): string => {
+    const ahora = new Date();
+    if (periodoLimpiar === '1mes') return new Date(ahora.getFullYear(), ahora.getMonth() - 1, ahora.getDate()).toISOString();
+    if (periodoLimpiar === '3meses') return new Date(ahora.getFullYear(), ahora.getMonth() - 3, ahora.getDate()).toISOString();
+    if (periodoLimpiar === '6meses') return new Date(ahora.getFullYear(), ahora.getMonth() - 6, ahora.getDate()).toISOString();
+    return fechaLimpiarHasta ? new Date(fechaLimpiarHasta).toISOString() : '';
+  };
+
+  const verificarConteo = async () => {
+    const corte = getFechaCorte();
+    if (!corte) return;
+    const [m, p] = await Promise.all([
+      supabase.from('mensajes_log').select('id', { count: 'exact', head: true }).lt('created_at', corte),
+      supabase.from('price_change_log').select('id', { count: 'exact', head: true }).lt('created_at', corte),
+    ]);
+    setConteoLimpiar({ mensajes: m.count ?? 0, precios: p.count ?? 0 });
+    setModalLimpiar(true);
+  };
+
+  const ejecutarLimpieza = async () => {
+    const corte = getFechaCorte();
+    if (!corte) return;
+    setLimpiando(true);
+    try {
+      await Promise.all([
+        supabase.from('mensajes_log').delete().lt('created_at', corte),
+        supabase.from('price_change_log').delete().lt('created_at', corte),
+      ]);
+      setModalLimpiar(false);
+      setConteoLimpiar(null);
+      fetchResumen();
+      fetchPrecios();
+    } catch (err) {
+      console.error('Error en limpieza:', err);
+    } finally {
+      setLimpiando(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -525,14 +571,94 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      {/* Próximamente */}
-      <div className="grid grid-cols-1 md:grid-cols-1 gap-4 opacity-50 pointer-events-none">
-        <div className="bg-white rounded-xl border border-dashed border-gray-300 p-5 text-center">
-          <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400">Limpieza de historial</p>
-          <p className="text-xs text-gray-300 mt-1">Próximamente</p>
+      {/* Limpieza de historial */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-4">Limpieza de historial</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <p className="text-sm text-gray-500 mb-5">
+            Elimina registros antiguos de envíos y cambios de precio para liberar espacio en la base de datos.
+            Esta acción no afecta productos, tiendas ni configuración.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-600 mb-2">Eliminar registros anteriores a:</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { val: '1mes', label: 'Hace 1 mes' },
+                  { val: '3meses', label: 'Hace 3 meses' },
+                  { val: '6meses', label: 'Hace 6 meses' },
+                  { val: 'personalizado', label: 'Fecha personalizada' },
+                ] as const).map((op) => (
+                  <button
+                    key={op.val}
+                    onClick={() => setPeriodoLimpiar(op.val)}
+                    className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+                      periodoLimpiar === op.val
+                        ? 'bg-red-600 text-white border-red-600'
+                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {op.label}
+                  </button>
+                ))}
+              </div>
+              {periodoLimpiar === 'personalizado' && (
+                <input
+                  type="date"
+                  value={fechaLimpiarHasta}
+                  onChange={(e) => setFechaLimpiarHasta(e.target.value)}
+                  className="mt-3 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                />
+              )}
+            </div>
+            <button
+              onClick={verificarConteo}
+              disabled={periodoLimpiar === 'personalizado' && !fechaLimpiarHasta}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors shrink-0"
+            >
+              <XCircle className="w-4 h-4" />
+              Limpiar historial
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Modal de confirmación de limpieza */}
+      {modalLimpiar && conteoLimpiar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 className="font-semibold text-gray-900 mb-2">Confirmar limpieza</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Se eliminarán permanentemente:
+            </p>
+            <div className="bg-red-50 rounded-lg p-3 mb-5 space-y-1">
+              <p className="text-sm text-red-800">
+                <span className="font-bold">{conteoLimpiar.mensajes.toLocaleString()}</span> registros de envíos WA
+              </p>
+              <p className="text-sm text-red-800">
+                <span className="font-bold">{conteoLimpiar.precios.toLocaleString()}</span> registros de cambios de precio
+              </p>
+            </div>
+            <p className="text-xs text-gray-400 mb-5">Esta acción no se puede deshacer.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setModalLimpiar(false); setConteoLimpiar(null); }}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={ejecutarLimpieza}
+                disabled={limpiando}
+                className="flex-1 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {limpiando ? 'Limpiando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
