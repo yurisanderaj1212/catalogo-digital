@@ -58,16 +58,10 @@ export default function SesionesPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   useEffect(() => {
-    const channel = supabase
-      .channel('wa-sessions-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wa_sessions' }, () => {
-        fetchData();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    fetchData();
+    const interval = setInterval(fetchData, 30_000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   const mostrarMensaje = (msg: string) => {
