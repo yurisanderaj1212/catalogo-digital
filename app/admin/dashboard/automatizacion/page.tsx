@@ -65,7 +65,7 @@ export default function AutomatizacionPage() {
         supabase.from('scheduler_config').select('*'),
         supabase.from('mensajes_log').select('*, tiendas(nombre), productos(nombre)')
           .order('created_at', { ascending: false }).limit(5),
-        supabase.from('price_change_log').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente'),
+        supabase.from('price_change_log').select('id').eq('estado', 'pendiente'),
       ]);
 
       const tiendasData = tiendasRes.data || [];
@@ -77,7 +77,7 @@ export default function AutomatizacionPage() {
         session: sessions.find((s: WaSession) => s.tienda_id === t.id) ?? null,
         scheduler: schedulers.find((s: SchedulerConfig) => s.tienda_id === t.id) ?? null,
       })));
-      setPendientes(pendientesRes.count ?? 0);
+      setPendientes((pendientesRes.data ?? []).length);
       setUltimosMensajes((mensajesRes.data || []).map((m: any) => ({
         ...m,
         tienda_nombre: m.tiendas?.nombre ?? '—',

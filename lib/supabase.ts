@@ -1,19 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
+/**
+ * supabase.ts — compatibilidad
+ * Re-exporta el cliente db y auth del api-client local.
+ * Esto permite que el código existente que usa `supabase.from()`
+ * siga funcionando sin cambios masivos.
+ */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+import { db, auth } from './api-client';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+// El cliente principal — reemplaza createClient() de @supabase/supabase-js
+export const supabase = {
+  from: db.from.bind(db),
+  auth,
+};
 
-// Tipos para la base de datos (adaptados a tu estructura con UUIDs)
+// ─── Tipos (sin cambios) ──────────────────────────────────────
+
 export interface Tienda {
-  id: string; // UUID
+  id: string;
   nombre: string;
   descripcion: string | null;
   logo: string | null;
@@ -23,39 +26,36 @@ export interface Tienda {
   longitud: number | null;
   activa: boolean;
   fecha_creacion: string;
-  whatsapp: string | null; // DEPRECATED - mantener por compatibilidad
-  // Nuevos campos para horarios
-  hora_apertura: string | null; // Formato: "08:00:00" (TIME)
-  hora_cierre: string | null; // Formato: "17:00:00" (TIME)
-  dias_laborales: string[] | null; // ["lunes", "martes", "miercoles", "jueves", "viernes"]
-  // Mensaje de bienvenida (primer mensaje de cada ciclo WA)
+  whatsapp: string | null;
+  hora_apertura: string | null;
+  hora_cierre: string | null;
+  dias_laborales: string[] | null;
   mensaje_bienvenida: string | null;
 }
 
 export interface Categoria {
-  id: string; // UUID
+  id: string;
   nombre: string;
-  tienda_id: string; // UUID
+  tienda_id: string;
   activa: boolean;
 }
 
 export interface Producto {
-  id: string; // UUID
+  id: string;
   nombre: string;
   descripcion: string | null;
   precio: number;
   moneda: 'CUP' | 'USD' | 'EUR';
   disponible: boolean;
   activo: boolean;
-  tienda_id: string; // UUID
-  categoria_id: string | null; // UUID
+  tienda_id: string;
+  categoria_id: string | null;
   fecha_creacion: string;
-  // Campos para automatización WA
   tipo_venta: 'unidad_caja' | 'unidad_sola' | 'carnico' | 'paquete';
   unidades_por_caja: number | null;
-  precio_caja: number | null;      // GENERATED: precio * unidades_por_caja
+  precio_caja: number | null;
   unidad_peso: 'kg' | 'lb' | 'ambos' | null;
-  precio_por_libra: number | null; // GENERATED: precio / 2.205
+  precio_por_libra: number | null;
 }
 
 export interface WaSession {
@@ -67,7 +67,7 @@ export interface WaSession {
   qr_actual: string | null;
   ultimo_ping: string | null;
   created_at: string;
-  sesion_maestra_id: string | null; // si está configurado, usa el socket de esa sesión
+  sesion_maestra_id: string | null;
 }
 
 export interface WaGrupo {
@@ -85,8 +85,8 @@ export interface SchedulerConfig {
   tienda_id: string;
   activo: boolean;
   intervalo_horas: number;
-  hora_inicio: string;  // "08:00"
-  hora_fin: string;     // "20:00"
+  hora_inicio: string;
+  hora_fin: string;
   productos_por_ciclo: number;
   modo_seleccion: 'rotacion' | 'aleatorio' | 'manual';
   ultimo_indice: number;
@@ -117,22 +117,22 @@ export interface PriceChangeLog {
 }
 
 export interface ImagenProducto {
-  id: string; // UUID
-  producto_id: string; // UUID
+  id: string;
+  producto_id: string;
   url_imagen: string;
   orden: number;
 }
 
 export interface ProductoTienda {
-  id: string; // UUID
-  producto_id: string; // UUID
-  tienda_id: string; // UUID
+  id: string;
+  producto_id: string;
+  tienda_id: string;
   fecha_agregado: string;
 }
 
 export interface GrupoWhatsApp {
-  id: string; // UUID
-  tienda_id: string; // UUID
+  id: string;
+  tienda_id: string;
   nombre: string;
   enlace: string;
   orden: number;

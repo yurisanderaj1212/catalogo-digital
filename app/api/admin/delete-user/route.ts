@@ -1,30 +1,19 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Cliente con Service Role Key (solo en servidor)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+const API_URL = process.env.API_URL ?? 'http://api-service:3002';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await request.json();
+    const token = request.headers.get('authorization') ?? '';
 
-    // Eliminar usuario de Supabase Auth
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    const res = await fetch(`${API_URL}/auth/delete-user/${userId}`, {
+      method: 'DELETE',
+      headers: { Authorization: token },
+    });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ success: true }, { status: 200 });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
