@@ -67,7 +67,7 @@ export default function ReportesPage() {
     try {
       let query = supabase
         .from('price_change_log')
-        .select('*, productos(nombre, tienda_id, tiendas:tienda_id(nombre))', { count: 'exact' })
+        .select('*, productos(nombre, tienda_id, tiendas:tienda_id(nombre))')
         .order('created_at', { ascending: false })
         .range(paginaPrecios * POR_PAGINA, (paginaPrecios + 1) * POR_PAGINA - 1);
 
@@ -212,17 +212,17 @@ export default function ReportesPage() {
         productosRes,
       ] = await Promise.all([
         supabase.from('tiendas').select('id, nombre').eq('activa', true).order('nombre'),
-        supabase.from('mensajes_log').select('id', { count: 'exact', head: true }).gte('created_at', inicioEsteMes),
-        supabase.from('mensajes_log').select('id', { count: 'exact', head: true }).gte('created_at', inicioMesAnterior).lte('created_at', finMesAnterior),
-        supabase.from('mensajes_log').select('id', { count: 'exact', head: true }).gte('created_at', inicioEsteMes).eq('estado', 'enviado'),
-        supabase.from('price_change_log').select('id', { count: 'exact', head: true }).gte('created_at', inicioEsteMes),
+        supabase.from('mensajes_log').select('id').gte('created_at', inicioEsteMes),
+        supabase.from('mensajes_log').select('id').gte('created_at', inicioMesAnterior).lte('created_at', finMesAnterior),
+        supabase.from('mensajes_log').select('id').gte('created_at', inicioEsteMes).eq('estado', 'enviado'),
+        supabase.from('price_change_log').select('id').gte('created_at', inicioEsteMes),
         supabase.from('productos').select('id, tienda_id, disponible, activo').eq('activo', true),
       ]);
 
       const tiendas = tiendasRes.data || [];
       const productos = productosRes.data || [];
-      const totalEnviados = mensajesEsteMesRes.count ?? 0;
-      const totalExito = mensajesExitoRes.count ?? 0;
+      const totalEnviados = mensajesEsteMesRes.data?.length ?? 0;
+      const totalExito = mensajesExitoRes.data?.length ?? 0;
 
       const resumenTiendas: ResumenTienda[] = tiendas.map((t) => {
         const prods = productos.filter((p) => p.tienda_id === t.id);
@@ -237,9 +237,9 @@ export default function ReportesPage() {
 
       setResumen({
         mensajesEsteMes: totalEnviados,
-        mensajesMesAnterior: mensajesMesAnteriorRes.count ?? 0,
+        mensajesMesAnterior: mensajesMesAnteriorRes.data?.length ?? 0,
         tasaExito: totalEnviados > 0 ? Math.round((totalExito / totalEnviados) * 100) : 0,
-        cambiosPrecioEsteMes: cambiosPrecioRes.count ?? 0,
+        cambiosPrecioEsteMes: cambiosPrecioRes.data?.length ?? 0,
         tiendas: resumenTiendas,
       });
     } catch (err) {
@@ -267,10 +267,10 @@ export default function ReportesPage() {
     const corte = getFechaCorte();
     if (!corte) return;
     const [m, p] = await Promise.all([
-      supabase.from('mensajes_log').select('id', { count: 'exact', head: true }).lt('created_at', corte),
-      supabase.from('price_change_log').select('id', { count: 'exact', head: true }).lt('created_at', corte),
+      supabase.from('mensajes_log').select('id').lt('created_at', corte),
+      supabase.from('price_change_log').select('id').lt('created_at', corte),
     ]);
-    setConteoLimpiar({ mensajes: m.count ?? 0, precios: p.count ?? 0 });
+    setConteoLimpiar({ mensajes: m.data?.length ?? 0, precios: p.data?.length ?? 0 });
     setModalLimpiar(true);
   };
 
