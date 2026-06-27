@@ -23,10 +23,12 @@ interface BotStatus {
   jobs_activos: string[];           // tiendaIds con cron activo
 }
 
-// Convierte hora UTC a hora Cuba (UTC-5)
+// Convierte hora UTC a hora Cuba (UTC-4 en verano, UTC-5 en invierno)
+// Ajustar OFFSET_HORAS cuando Cuba cambie de horario
+const OFFSET_HORAS_CUBA = -4;
 function utcALocal(horaUtc: string): string {
   const [h, m] = horaUtc.split(':').map(Number);
-  const hLocal = (h - 5 + 24) % 24;
+  const hLocal = (h + OFFSET_HORAS_CUBA + 24) % 24;
   return `${String(hLocal).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 

@@ -12,8 +12,9 @@ interface TiendaConConfig extends Tienda {
 const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
 const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
 
-// Cuba = UTC-5 (sin cambio de horario de verano)
-const OFFSET_HORAS = -5;
+// Cuba = UTC-4 (horario de verano, CDT). En invierno es UTC-5 (CST).
+// Ajustar manualmente cuando Cuba cambie de horario.
+const OFFSET_HORAS = -4;
 
 /** Convierte hora local Cuba "HH:MM" a UTC "HH:MM" para guardar en DB */
 function localAUtc(horaLocal: string): string {
