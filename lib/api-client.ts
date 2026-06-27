@@ -142,6 +142,8 @@ interface QueryBuilder<T> {
   lte(col: string, val: unknown): QueryBuilder<T>;
   order(col: string, opts?: { ascending?: boolean }): QueryBuilder<T>;
   limit(n: number): QueryBuilder<T>;
+  offset(n: number): QueryBuilder<T>;
+  range(from: number, to: number): QueryBuilder<T>;
   single(): Promise<{ data: T | null; error: string | null; count?: number }>;
   then(resolve: (result: { data: T[] | null; error: string | null; count?: number | null }) => void): void;
 }
@@ -153,6 +155,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     filters: Array<{ col: string; op: string; val: unknown }>;
     orderBy: Array<{ col: string; ascending: boolean }>;
     limitN: number | null;
+    offsetN: number | null;
     body: Partial<T> | Partial<T>[] | null;
     onConflict: string | null;
     headOnly: boolean;
@@ -163,6 +166,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     filters: [],
     orderBy: [],
     limitN: null,
+    offsetN: null,
     body: null,
     onConflict: null,
     headOnly: false,
@@ -177,6 +181,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
       filters: state.filters,
       orderBy: state.orderBy,
       limit: state.limitN,
+      offset: state.offsetN,
       body: state.body,
       onConflict: state.onConflict,
       headOnly: state.headOnly,
@@ -218,6 +223,8 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
       return builder;
     },
     limit(n) { state.limitN = n; return builder; },
+    offset(n) { state.offsetN = n; return builder; },
+    range(from, to) { state.offsetN = from; state.limitN = to - from + 1; return builder; },
     async single() {
       state.limitN = 1;
       const result = await execute();
