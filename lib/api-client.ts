@@ -140,6 +140,8 @@ interface QueryBuilder<T> {
   not(col: string, op: string, val: unknown): QueryBuilder<T>;
   gte(col: string, val: unknown): QueryBuilder<T>;
   lte(col: string, val: unknown): QueryBuilder<T>;
+  lt(col: string, val: unknown): QueryBuilder<T>;
+  gt(col: string, val: unknown): QueryBuilder<T>;
   order(col: string, opts?: { ascending?: boolean }): QueryBuilder<T>;
   limit(n: number): QueryBuilder<T>;
   offset(n: number): QueryBuilder<T>;
@@ -218,6 +220,8 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     not(col, op, val) { state.filters.push({ col, op: `not.${op}`, val }); return builder; },
     gte(col, val) { state.filters.push({ col, op: 'gte', val }); return builder; },
     lte(col, val) { state.filters.push({ col, op: 'lte', val }); return builder; },
+    lt(col, val) { state.filters.push({ col, op: 'lt', val }); return builder; },
+    gt(col, val) { state.filters.push({ col, op: 'gt', val }); return builder; },
     order(col, opts) {
       state.orderBy.push({ col, ascending: opts?.ascending ?? true });
       return builder;
