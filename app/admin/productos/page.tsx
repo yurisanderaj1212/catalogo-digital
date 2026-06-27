@@ -30,6 +30,8 @@ export default function ProductosPage() {
       ]);
 
       if (productosRes.data && tiendasRes.data && categoriasRes.data) {
+        const tiendasData = tiendasRes.data;
+        const categoriasData = categoriasRes.data;
         const productosConRelaciones = await Promise.all(
           productosRes.data.map(async (prod) => {
             const { data: imagenes } = await supabase
@@ -41,15 +43,15 @@ export default function ProductosPage() {
 
             return {
               ...prod,
-              tienda: tiendasRes.data.find((t) => t.id === prod.tienda_id),
-              categoria: categoriasRes.data.find((c) => c.id === prod.categoria_id),
+              tienda: tiendasData.find((t) => t.id === prod.tienda_id),
+              categoria: categoriasData.find((c) => c.id === prod.categoria_id),
               imagenes: imagenes || [],
             };
           })
         );
 
         setProductos(productosConRelaciones);
-        setTiendas(tiendasRes.data);
+        setTiendas(tiendasData);
       }
     } catch (error) {
       console.error('Error:', error);

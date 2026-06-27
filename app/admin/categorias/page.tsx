@@ -28,12 +28,13 @@ export default function CategoriasPage() {
       ]);
 
       if (categoriasRes.data && tiendasRes.data) {
+        const tiendasData = tiendasRes.data;
         const categoriasConTienda = categoriasRes.data.map((cat) => ({
           ...cat,
-          tienda: tiendasRes.data.find((t) => t.id === cat.tienda_id),
+          tienda: tiendasData.find((t) => t.id === cat.tienda_id),
         }));
         setCategorias(categoriasConTienda);
-        setTiendas(tiendasRes.data);
+        setTiendas(tiendasData);
       }
     } catch (error) {
       console.error('Error:', error);

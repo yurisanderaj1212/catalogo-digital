@@ -46,6 +46,8 @@ export default function ProductosPage() {
       ]);
 
       if (productosRes.data && tiendasRes.data && categoriasRes.data) {
+        const tiendasData = tiendasRes.data;
+        const categoriasData = categoriasRes.data;
         // OPTIMIZACIÓN: Cargar TODAS las imágenes en una sola consulta (batch)
         const productosIds = productosRes.data.map(p => p.id);
         const { data: todasImagenes } = await supabase
@@ -54,34 +56,29 @@ export default function ProductosPage() {
           .in('producto_id', productosIds)
           .order('orden');
 
-        // Crear un mapa de imágenes por producto (solo la primera)
         const imagenesPorProducto = (todasImagenes || []).reduce((acc, img) => {
-          if (!acc[img.producto_id]) {
-            acc[img.producto_id] = [img]; // Solo guardar la primera imagen
-          }
+          if (!acc[img.producto_id]) acc[img.producto_id] = [img];
           return acc;
         }, {} as Record<string, any[]>);
 
-        // Crear un mapa de tiendas por producto
         const tiendasPorProducto = (productosTiendasRes.data || []).reduce((acc, pt) => {
           if (!acc[pt.producto_id]) acc[pt.producto_id] = [];
-          const tienda = tiendasRes.data.find(t => t.id === pt.tienda_id);
+          const tienda = tiendasData.find(t => t.id === pt.tienda_id);
           if (tienda) acc[pt.producto_id].push(tienda);
           return acc;
         }, {} as Record<string, any[]>);
 
-        // Combinar datos sin hacer consultas adicionales
         const productosConRelaciones = productosRes.data.map((prod) => ({
           ...prod,
-          tienda: tiendasRes.data.find((t) => t.id === prod.tienda_id), // Mantener compatibilidad
-          tiendas: tiendasPorProducto[prod.id] || [], // Nuevo: array de tiendas
-          categoria: categoriasRes.data.find((c) => c.id === prod.categoria_id),
+          tienda: tiendasData.find((t) => t.id === prod.tienda_id),
+          tiendas: tiendasPorProducto[prod.id] || [],
+          categoria: categoriasData.find((c) => c.id === prod.categoria_id),
           imagenes: imagenesPorProducto[prod.id] || [],
         }));
 
         setProductos(productosConRelaciones);
-        setTiendas(tiendasRes.data);
-        setCategorias(categoriasRes.data);
+        setTiendas(tiendasData);
+        setCategorias(categoriasData);
       }
     } catch (error) {
       console.error('Error:', error);
