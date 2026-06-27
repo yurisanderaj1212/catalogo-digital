@@ -101,7 +101,7 @@ export default function AdministradoresPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: authData.user.id }),
         });
-        throw new Error(`Error al agregar admin: ${adminError.message}`);
+        throw new Error(`Error al agregar admin: ${adminError}`);
       }
 
       mostrarMensaje('success', 'Administrador agregado exitosamente');
