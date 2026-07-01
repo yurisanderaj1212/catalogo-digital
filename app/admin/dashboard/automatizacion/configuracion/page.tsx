@@ -77,11 +77,11 @@ export default function ConfiguracionPage() {
       tiendasConConfig.forEach((t) => {
         initial[t.id] = t.config ? {
           activo: t.config.activo,
-          intervalo_horas: t.config.intervalo_horas,
+          intervalo_horas: Number(t.config.intervalo_horas) || 4,
           // Convertir UTC de DB a hora local Cuba para mostrar en el panel
           hora_inicio: utcALocal(t.config.hora_inicio?.slice(0, 5) ?? '13:00'),
           hora_fin: utcALocal(t.config.hora_fin?.slice(0, 5) ?? '01:00'),
-          productos_por_ciclo: t.config.productos_por_ciclo,
+          productos_por_ciclo: Number(t.config.productos_por_ciclo) || 5,
           modo_seleccion: t.config.modo_seleccion as 'rotacion' | 'aleatorio' | 'manual',
         } : { ...defaultConfig };
       });
@@ -308,10 +308,10 @@ export default function ConfiguracionPage() {
                 {/* Intervalo */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Intervalo (horas)</label>
-                  <input type="number" min={1} max={24} value={form.intervalo_horas}
+                  <input type="number" min={1} max={24} value={form.intervalo_horas || ''}
                     onChange={(e) => {
                       const v = parseInt(e.target.value);
-                      if (!isNaN(v)) update(t.id, 'intervalo_horas', v);
+                      if (!isNaN(v) && v >= 1) update(t.id, 'intervalo_horas', v);
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
@@ -332,10 +332,10 @@ export default function ConfiguracionPage() {
                 {/* Productos por ciclo */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Productos/ciclo</label>
-                  <input type="number" min={1} max={20} value={form.productos_por_ciclo}
+                  <input type="number" min={1} max={20} value={form.productos_por_ciclo || ''}
                     onChange={(e) => {
                       const v = parseInt(e.target.value);
-                      if (!isNaN(v)) update(t.id, 'productos_por_ciclo', v);
+                      if (!isNaN(v) && v >= 1) update(t.id, 'productos_por_ciclo', v);
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
