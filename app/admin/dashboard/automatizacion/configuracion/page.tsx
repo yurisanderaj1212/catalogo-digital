@@ -135,7 +135,7 @@ export default function ConfiguracionPage() {
   const aplicarPausaGlobal = async () => {
     setAplicandoPausa(true);
     try {
-      await supabase.from('scheduler_config').update({ activo: false, updated_at: new Date().toISOString() }).neq('id', '');
+      await supabase.from('scheduler_config').update({ activo: false, updated_at: new Date().toISOString() }).eq('activo', true);
       setPausaGlobal(true);
       setMensaje('⚠️ Todos los schedulers pausados');
       await fetchData();
