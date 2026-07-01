@@ -67,7 +67,7 @@ export default function ReportesPage() {
     try {
       let query = supabase
         .from('price_change_log')
-        .select('*, productos(nombre, tienda_id, tiendas:tienda_id(nombre))')
+        .select('*, productos(nombre)')
         .order('created_at', { ascending: false })
         .range(paginaPrecios * POR_PAGINA, (paginaPrecios + 1) * POR_PAGINA - 1);
 
@@ -75,13 +75,33 @@ export default function ReportesPage() {
       if (fechaHasta) query = query.lte('created_at', fechaHasta + 'T23:59:59');
 
       const { data } = await query;
-      let resultado = (data || []).map((r: any) => ({
+      const logs = data || [];
+
+      // Obtener tiendas de los productos via productos_tiendas
+      const productoIds = [...new Set(logs.map((r: any) => r.producto_id).filter(Boolean))];
+      let tiendasPorProducto: Record<string, string> = {};
+
+      if (productoIds.length > 0) {
+        const { data: rels } = await supabase
+          .from('productos_tiendas')
+          .select('producto_id, tiendas(nombre)')
+          .in('producto_id', productoIds);
+
+        for (const rel of rels || []) {
+          const tid = (rel as any).producto_id;
+          const nombre = (rel as any).tiendas?.nombre;
+          if (tid && nombre && !tiendasPorProducto[tid]) {
+            tiendasPorProducto[tid] = nombre;
+          }
+        }
+      }
+
+      let resultado = logs.map((r: any) => ({
         ...r,
         producto_nombre: r.productos?.nombre ?? '—',
-        tienda_nombre: r.productos?.tiendas?.nombre ?? '—',
+        tienda_nombre: tiendasPorProducto[r.producto_id] ?? '—',
       }));
 
-      // Filtro por nombre en frontend (más flexible)
       if (busquedaProducto.trim()) {
         resultado = resultado.filter((r: any) =>
           r.producto_nombre.toLowerCase().includes(busquedaProducto.toLowerCase())
@@ -210,28 +230,47 @@ export default function ReportesPage() {
         mensajesExitoRes,
         cambiosPrecioRes,
         productosRes,
+        relacionesRes,
       ] = await Promise.all([
         supabase.from('tiendas').select('id, nombre').eq('activa', true).order('nombre'),
         supabase.from('mensajes_log').select('id').gte('created_at', inicioEsteMes),
         supabase.from('mensajes_log').select('id').gte('created_at', inicioMesAnterior).lte('created_at', finMesAnterior),
         supabase.from('mensajes_log').select('id').gte('created_at', inicioEsteMes).eq('estado', 'enviado'),
         supabase.from('price_change_log').select('id').gte('created_at', inicioEsteMes),
-        supabase.from('productos').select('id, tienda_id, disponible, activo').eq('activo', true),
+        // Todos los productos activos con su estado de disponibilidad
+        supabase.from('productos').select('id, disponible').eq('activo', true),
+        // Relaciones producto↔tienda via tabla pivot
+        supabase.from('productos_tiendas').select('tienda_id, producto_id'),
       ]);
 
       const tiendas = tiendasRes.data || [];
       const productos = productosRes.data || [];
+      const relaciones = relacionesRes.data || [];
       const totalEnviados = mensajesEsteMesRes.data?.length ?? 0;
       const totalExito = mensajesExitoRes.data?.length ?? 0;
 
+      // Mapa rápido: producto_id → disponible
+      const disponibilidadMap = new Map<string, boolean>(
+        productos.map((p) => [p.id, p.disponible])
+      );
+
       const resumenTiendas: ResumenTienda[] = tiendas.map((t) => {
-        const prods = productos.filter((p) => p.tienda_id === t.id);
+        // Obtener los producto_ids de esta tienda via tabla pivot
+        const idsEnTienda = relaciones
+          .filter((r) => r.tienda_id === t.id)
+          .map((r) => r.producto_id);
+
+        // Solo contar productos que existen y están activos
+        const productosActivos = idsEnTienda.filter((id) => disponibilidadMap.has(id));
+        const disponibles = productosActivos.filter((id) => disponibilidadMap.get(id) === true).length;
+        const agotados = productosActivos.filter((id) => disponibilidadMap.get(id) === false).length;
+
         return {
           id: t.id,
           nombre: t.nombre,
-          totalProductos: prods.length,
-          productosDisponibles: prods.filter((p) => p.disponible).length,
-          productosAgotados: prods.filter((p) => !p.disponible).length,
+          totalProductos: productosActivos.length,
+          productosDisponibles: disponibles,
+          productosAgotados: agotados,
         };
       });
 
