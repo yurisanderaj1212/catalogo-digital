@@ -97,15 +97,19 @@ export default function ConfiguracionPage() {
   };
 
   const guardarConfig = async (tiendaId: string) => {
+    if (!tiendaId) return;
     setGuardando(tiendaId);
     const form = formStates[tiendaId];
     const tienda = tiendas.find((t) => t.id === tiendaId);
     try {
-      // Convertir horas locales Cuba a UTC antes de guardar en DB
+      // Solo enviar los campos conocidos — evitar campos extra o UUIDs incorrectos
       const dataToSave = {
-        ...form,
+        activo: form.activo,
+        intervalo_horas: form.intervalo_horas,
         hora_inicio: localAUtc(form.hora_inicio),
         hora_fin: localAUtc(form.hora_fin),
+        productos_por_ciclo: form.productos_por_ciclo,
+        modo_seleccion: form.modo_seleccion,
         updated_at: new Date().toISOString(),
       };
       if (tienda?.config) {
