@@ -77,11 +77,10 @@ export default function ConfiguracionPage() {
       tiendasConConfig.forEach((t) => {
         initial[t.id] = t.config ? {
           activo: t.config.activo,
-          intervalo_horas: Number(t.config.intervalo_horas) || 4,
-          // Convertir UTC de DB a hora local Cuba para mostrar en el panel
+          intervalo_horas: t.config.intervalo_horas ?? defaultConfig.intervalo_horas,
           hora_inicio: utcALocal(t.config.hora_inicio?.slice(0, 5) ?? '13:00'),
           hora_fin: utcALocal(t.config.hora_fin?.slice(0, 5) ?? '01:00'),
-          productos_por_ciclo: Number(t.config.productos_por_ciclo) || 5,
+          productos_por_ciclo: t.config.productos_por_ciclo ?? defaultConfig.productos_por_ciclo,
           modo_seleccion: t.config.modo_seleccion as 'rotacion' | 'aleatorio' | 'manual',
         } : { ...defaultConfig };
       });
