@@ -116,6 +116,16 @@ export default function ConfiguracionPage() {
       } else {
         await supabase.from('scheduler_config').insert({ tienda_id: tiendaId, ...dataToSave });
       }
+
+      // Notificar al bot para que resincronice el CronManager inmediatamente
+      // sin esperar el polling de 10 minutos
+      if (BOT_URL) {
+        fetch(`${BOT_URL}/api/scheduler/sincronizar`, {
+          method: 'POST',
+          headers: { 'x-bot-secret': BOT_SECRET },
+        }).catch(() => {}); // fire and forget — no bloquea el guardado
+      }
+
       setMensaje('Configuración guardada');
       await fetchData();
     } catch (err) {
