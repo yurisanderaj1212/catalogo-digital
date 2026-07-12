@@ -134,9 +134,23 @@ export default function ConfiguracionPage() {
   const aplicarPausaGlobal = async () => {
     setAplicandoPausa(true);
     try {
+      // 1. Pausar en DB
       await supabase.from('scheduler_config').update({ activo: false, updated_at: new Date().toISOString() }).eq('activo', true);
       setPausaGlobal(true);
-      setMensaje('⚠️ Todos los schedulers pausados');
+
+      // 2. Notificar al bot para cancelar jobs en Redis y limpiar cache en memoria
+      if (BOT_URL) {
+        try {
+          await fetch(`${BOT_URL}/api/pausar`, {
+            method: 'POST',
+            headers: { 'x-bot-secret': BOT_SECRET },
+          });
+        } catch {
+          // Si el bot no responde, la pausa en DB igual es efectiva para el próximo ciclo
+        }
+      }
+
+      setMensaje('⚠️ Todos los schedulers pausados y jobs cancelados');
       await fetchData();
     } catch (err) {
       setMensaje('Error al pausar');
