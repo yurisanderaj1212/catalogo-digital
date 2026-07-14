@@ -265,7 +265,7 @@ export default function ProductosPage() {
                 
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg font-bold text-blue-600">
-                    ${producto.precio.toLocaleString('es-CU')}
+                    ${new Intl.NumberFormat('es-ES', { minimumFractionDigits: producto.precio % 1 !== 0 ? 2 : 0, maximumFractionDigits: 2 }).format(producto.precio)}
                   </span>
                   <span className="text-xs text-gray-500">{producto.moneda}</span>
                 </div>

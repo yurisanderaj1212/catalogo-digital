@@ -7,6 +7,17 @@ import { useParams, useRouter } from 'next/navigation';
 import { MapPin, Search, ArrowLeft, Phone, X, ChevronLeft, ChevronRight, Clock, Package } from 'lucide-react';
 import ModalGruposWhatsApp from './components/ModalGruposWhatsApp';
 
+// Formatea precios: sin .00 para enteros, con decimales solo si son significativos
+// Usa punto como separador de miles: 16.200, 1.395, 9,70
+function fmt(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '0';
+  const tieneDecimales = n % 1 !== 0;
+  return new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: tieneDecimales ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
 interface ProductoConImagenes extends Producto {
   imagenes: (ImagenProducto & { url_original?: string })[];
   categoria: Categoria | null;
@@ -395,16 +406,16 @@ export default function TiendaPage() {
                         {producto.descripcion && <p className="text-xs text-gray-600 mb-1.5 line-clamp-2">{producto.descripcion}</p>}
                         {producto.tipo_venta === 'unidad_caja' && producto.precio_caja ? (
                           <div>
-                            <p className="text-xs text-gray-500">{producto.precio.toLocaleString('es-CU')} {producto.moneda}/u</p>
-                            <p className="text-sm font-bold text-blue-600">Caja: ${producto.precio_caja.toLocaleString('es-CU')} <span className="text-xs">{producto.moneda}</span></p>
+                            <p className="text-xs text-gray-500">{fmt(producto.precio)} {producto.moneda}/u</p>
+                            <p className="text-sm font-bold text-blue-600">Caja: ${fmt(producto.precio_caja)} <span className="text-xs">{producto.moneda}</span></p>
                           </div>
                         ) : producto.tipo_venta === 'carnico' ? (
                           <div>
                             {(producto.unidad_peso === 'kg' || producto.unidad_peso === 'ambos') && (
-                              <p className="text-sm font-bold text-blue-600">${producto.precio.toLocaleString('es-CU')} {producto.moneda}/kg</p>
+                              <p className="text-sm font-bold text-blue-600">${fmt(producto.precio)} {producto.moneda}/kg</p>
                             )}
                             {(producto.unidad_peso === 'lb' || producto.unidad_peso === 'ambos') && producto.precio_por_libra && (
-                              <p className="text-sm font-bold text-blue-600">${Math.round(producto.precio_por_libra).toLocaleString('es-CU')} {producto.moneda}/lb</p>
+                              <p className="text-sm font-bold text-blue-600">${fmt(producto.precio_por_libra)} {producto.moneda}/lb</p>
                             )}
                           </div>
                         ) : producto.tipo_venta === 'paquete' ? (
@@ -412,11 +423,11 @@ export default function TiendaPage() {
                             {producto.unidades_por_caja && (
                               <p className="text-xs text-gray-500">Paquete x{producto.unidades_por_caja}u</p>
                             )}
-                            <p className="text-base font-bold text-blue-600">${producto.precio.toLocaleString('es-CU')} <span className="text-xs">{producto.moneda}</span></p>
+                            <p className="text-base font-bold text-blue-600">${fmt(producto.precio)} <span className="text-xs">{producto.moneda}</span></p>
                           </div>
                         ) : (
                           <p className="text-base font-bold text-blue-600">
-                            ${producto.precio.toLocaleString('es-CU')} <span className="text-xs">{producto.moneda}</span>
+                            ${fmt(producto.precio)} <span className="text-xs">{producto.moneda}</span>
                           </p>
                         )}
                       </div>
@@ -491,16 +502,16 @@ export default function TiendaPage() {
                     <div className="flex flex-col gap-1">
                       {productoSeleccionado.tipo_venta === 'unidad_caja' && productoSeleccionado.precio_caja ? (
                         <div>
-                          <p className="text-sm text-blue-500">Por unidad: ${productoSeleccionado.precio.toLocaleString('es-CU')} {productoSeleccionado.moneda}</p>
-                          <p className="text-xl font-bold text-blue-700">Caja ({productoSeleccionado.unidades_por_caja}u): ${productoSeleccionado.precio_caja.toLocaleString('es-CU')} <span className="text-sm">{productoSeleccionado.moneda}</span></p>
+                          <p className="text-sm text-blue-500">Por unidad: ${fmt(productoSeleccionado.precio)} {productoSeleccionado.moneda}</p>
+                          <p className="text-xl font-bold text-blue-700">Caja ({productoSeleccionado.unidades_por_caja}u): ${fmt(productoSeleccionado.precio_caja)} <span className="text-sm">{productoSeleccionado.moneda}</span></p>
                         </div>
                       ) : productoSeleccionado.tipo_venta === 'carnico' ? (
                         <div className="space-y-0.5">
                           {(productoSeleccionado.unidad_peso === 'kg' || productoSeleccionado.unidad_peso === 'ambos') && (
-                            <p className="text-xl font-bold text-blue-700">${productoSeleccionado.precio.toLocaleString('es-CU')} <span className="text-sm font-medium">{productoSeleccionado.moneda}/kg</span></p>
+                            <p className="text-xl font-bold text-blue-700">${fmt(productoSeleccionado.precio)} <span className="text-sm font-medium">{productoSeleccionado.moneda}/kg</span></p>
                           )}
                           {(productoSeleccionado.unidad_peso === 'lb' || productoSeleccionado.unidad_peso === 'ambos') && productoSeleccionado.precio_por_libra && (
-                            <p className="text-xl font-bold text-blue-700">${Math.round(productoSeleccionado.precio_por_libra).toLocaleString('es-CU')} <span className="text-sm font-medium">{productoSeleccionado.moneda}/lb</span></p>
+                            <p className="text-xl font-bold text-blue-700">${fmt(productoSeleccionado.precio_por_libra)} <span className="text-sm font-medium">{productoSeleccionado.moneda}/lb</span></p>
                           )}
                         </div>
                       ) : productoSeleccionado.tipo_venta === 'paquete' ? (
@@ -508,12 +519,12 @@ export default function TiendaPage() {
                           {productoSeleccionado.unidades_por_caja && (
                             <p className="text-sm text-blue-500">Paquete x{productoSeleccionado.unidades_por_caja} unidades</p>
                           )}
-                          <span className="text-2xl font-bold text-blue-700">${productoSeleccionado.precio.toLocaleString('es-CU')}</span>
+                          <span className="text-2xl font-bold text-blue-700">${fmt(productoSeleccionado.precio)}</span>
                           <span className="text-sm text-blue-600 font-medium ml-1">{productoSeleccionado.moneda}</span>
                         </div>
                       ) : (
                         <div className="flex items-baseline gap-2">
-                          <span className="text-2xl font-bold text-blue-700">${productoSeleccionado.precio.toLocaleString('es-CU')}</span>
+                          <span className="text-2xl font-bold text-blue-700">${fmt(productoSeleccionado.precio)}</span>
                           <span className="text-sm text-blue-600 font-medium">{productoSeleccionado.moneda}</span>
                         </div>
                       )}
