@@ -42,6 +42,7 @@ const defaultConfig = {
 export default function ConfiguracionPage() {
   const [tiendas, setTiendas] = useState<TiendaConConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inicializado, setInicializado] = useState(false);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [formStates, setFormStates] = useState<Record<string, typeof defaultConfig>>({});
   const [pausaGlobal, setPausaGlobal] = useState(false);
@@ -92,6 +93,7 @@ export default function ConfiguracionPage() {
       console.error('Error:', err);
     } finally {
       setLoading(false);
+      setInicializado(true);
     }
   };
 
@@ -233,7 +235,7 @@ export default function ConfiguracionPage() {
     setFormStates((prev) => ({ ...prev, [tiendaId]: { ...prev[tiendaId], [field]: value } }));
   };
 
-  if (loading) return <div className="flex items-center justify-center h-48"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" /></div>;
+  if (loading && !inicializado) return <div className="flex items-center justify-center h-48"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" /></div>;
 
   return (
     <div className="space-y-6">
