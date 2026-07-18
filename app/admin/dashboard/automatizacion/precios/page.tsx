@@ -124,6 +124,10 @@ export default function PreciosPage() {
   const [textoAgotado, setTextoAgotado] = useState('');
   const [productosAgotados, setProductosAgotados] = useState<Producto[]>([]);
   const [enviandoAgotado, setEnviandoAgotado] = useState(false);
+  // tiendaSeleccionadaAgotado: map productoId → tiendaId elegida
+  const [tiendaSeleccionadaAgotado, setTiendaSeleccionadaAgotado] = useState<Record<string, string>>({});
+  // tiendasPorProducto: map productoId → lista de tiendas donde está disponible
+  const [tiendasPorProducto, setTiendasPorProducto] = useState<Record<string, Tienda[]>>({});
 
   useEffect(() => {
     fetchProductos();
@@ -203,7 +207,7 @@ export default function PreciosPage() {
     }
   };
 
-  const buscarProductosAgotados = () => {
+  const buscarProductosAgotados = async () => {
     if (!textoAgotado.trim()) return;
     const lineas = textoAgotado.split('\n').map(l => l.trim()).filter(Boolean);
     const encontrados: Producto[] = [];
@@ -216,21 +220,43 @@ export default function PreciosPage() {
       if (mejor && mejorScore >= 0.5 && !encontrados.find(p => p.id === mejor!.id)) encontrados.push(mejor);
     }
     setProductosAgotados(encontrados);
+
+    // Cargar las tiendas donde está cada producto para que el admin elija
+    const tiendasMap: Record<string, Tienda[]> = {};
+    const selMap: Record<string, string> = {};
+    for (const prod of encontrados) {
+      const { data: rels } = await supabase.from('productos_tiendas').select('tienda_id').eq('producto_id', prod.id);
+      const tiendasDelProducto = (rels || [])
+        .map((r: any) => tiendas.find(t => t.id === r.tienda_id))
+        .filter(Boolean) as Tienda[];
+      tiendasMap[prod.id] = tiendasDelProducto;
+      // Si solo hay una tienda, seleccionarla automáticamente
+      if (tiendasDelProducto.length === 1) selMap[prod.id] = tiendasDelProducto[0].id;
+    }
+    setTiendasPorProducto(tiendasMap);
+    setTiendaSeleccionadaAgotado(selMap);
   };
 
   const notificarAgotados = async () => {
     if (productosAgotados.length === 0) return;
+    // Verificar que todos tienen tienda seleccionada
+    const sinTienda = productosAgotados.filter(p => !tiendaSeleccionadaAgotado[p.id]);
+    if (sinTienda.length > 0) {
+      mostrarMensaje(`Selecciona la tienda para: ${sinTienda.map(p => p.nombre).join(', ')}`);
+      return;
+    }
     setEnviandoAgotado(true);
     let totalEnviados = 0;
     for (const producto of productosAgotados) {
-      const { data: rels } = await supabase.from('productos_tiendas').select('tienda_id').eq('producto_id', producto.id);
-      for (const rel of rels || []) {
-        const res = await llamarBot(`/api/agotado/${rel.tienda_id}`, { productoId: producto.id });
-        if (res?.ok) totalEnviados += res.enviados ?? 0;
-      }
+      const tiendaId = tiendaSeleccionadaAgotado[producto.id];
+      const res = await llamarBot(`/api/agotado/${tiendaId}`, { productoId: producto.id });
+      if (res?.ok) totalEnviados += res.enviados ?? 0;
     }
     mostrarMensaje(`${productosAgotados.length} producto(s) agotado(s) — ${totalEnviados} grupos notificados`);
-    setProductosAgotados([]); setTextoAgotado('');
+    setProductosAgotados([]);
+    setTextoAgotado('');
+    setTiendaSeleccionadaAgotado({});
+    setTiendasPorProducto({});
     await fetchProductos();
     setEnviandoAgotado(false);
   };
@@ -404,12 +430,37 @@ export default function PreciosPage() {
               </button>
             </div>
             <div className="divide-y divide-orange-100">
-              {productosAgotados.map((p) => (
-                <div key={p.id} className="flex items-center justify-between px-4 py-2">
-                  <span className="text-sm text-gray-900">{p.nombre}</span>
-                  <span className="text-xs text-red-600 font-medium">AGOTADO</span>
-                </div>
-              ))}
+              {productosAgotados.map((p) => {
+                const tiendasDisp = tiendasPorProducto[p.id] || [];
+                const tiendaSeleccionada = tiendaSeleccionadaAgotado[p.id];
+                return (
+                  <div key={p.id} className="px-4 py-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-gray-900">{p.nombre}</span>
+                      <span className="text-xs text-red-600 font-medium">AGOTADO</span>
+                    </div>
+                    {tiendasDisp.length === 1 ? (
+                      <p className="text-xs text-gray-500">Tienda: {tiendasDisp[0].nombre}</p>
+                    ) : tiendasDisp.length > 1 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 shrink-0">Agotar en:</span>
+                        <select
+                          value={tiendaSeleccionada || ''}
+                          onChange={(e) => setTiendaSeleccionadaAgotado(prev => ({ ...prev, [p.id]: e.target.value }))}
+                          className="text-xs px-2 py-1 border border-orange-300 rounded-lg focus:ring-1 focus:ring-orange-500 flex-1"
+                        >
+                          <option value="">— Selecciona tienda —</option>
+                          {tiendasDisp.map(t => (
+                            <option key={t.id} value={t.id}>{t.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">Sin tiendas asignadas</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
