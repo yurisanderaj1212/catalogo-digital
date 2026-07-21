@@ -237,8 +237,8 @@ export default function ReportesPage() {
         supabase.from('mensajes_log').select('id').gte('created_at', inicioMesAnterior).lte('created_at', finMesAnterior),
         supabase.from('mensajes_log').select('id').gte('created_at', inicioEsteMes).eq('estado', 'enviado'),
         supabase.from('price_change_log').select('id').gte('created_at', inicioEsteMes),
-        // Todos los productos activos con su estado de disponibilidad
-        supabase.from('productos').select('id, disponible').eq('activo', true),
+        // Todos los productos (activos e inactivos) con su estado para conteo correcto
+        supabase.from('productos').select('id, disponible, activo'),
         // Relaciones producto↔tienda via tabla pivot
         supabase.from('productos_tiendas').select('tienda_id, producto_id'),
       ]);
@@ -249,21 +249,23 @@ export default function ReportesPage() {
       const totalEnviados = mensajesEsteMesRes.data?.length ?? 0;
       const totalExito = mensajesExitoRes.data?.length ?? 0;
 
-      // Mapa rápido: producto_id → disponible
-      const disponibilidadMap = new Map<string, boolean>(
-        productos.map((p) => [p.id, p.disponible])
+      // Mapa rápido: producto_id → { disponible, activo }
+      const disponibilidadMap = new Map<string, { disponible: boolean; activo: boolean }>(
+        productos.map((p) => [p.id, { disponible: p.disponible, activo: p.activo }])
       );
 
       const resumenTiendas: ResumenTienda[] = tiendas.map((t) => {
-        // Obtener los producto_ids de esta tienda via tabla pivot
         const idsEnTienda = relaciones
           .filter((r) => r.tienda_id === t.id)
           .map((r) => r.producto_id);
 
-        // Solo contar productos que existen y están activos
-        const productosActivos = idsEnTienda.filter((id) => disponibilidadMap.has(id));
-        const disponibles = productosActivos.filter((id) => disponibilidadMap.get(id) === true).length;
-        const agotados = productosActivos.filter((id) => disponibilidadMap.get(id) === false).length;
+        const todosEnTienda = idsEnTienda.filter((id) => disponibilidadMap.has(id));
+        // Activos = activo true
+        const productosActivos = todosEnTienda.filter((id) => disponibilidadMap.get(id)?.activo === true);
+        // Disponibles = activos y disponibles
+        const disponibles = productosActivos.filter((id) => disponibilidadMap.get(id)?.disponible === true).length;
+        // Agotados = activos pero no disponibles, O inactivos
+        const agotados = todosEnTienda.filter((id) => disponibilidadMap.get(id)?.disponible === false).length;
 
         return {
           id: t.id,
