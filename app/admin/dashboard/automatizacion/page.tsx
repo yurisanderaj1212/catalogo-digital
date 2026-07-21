@@ -282,9 +282,9 @@ export default function AutomatizacionPage() {
               <tbody className="divide-y divide-gray-100">
                 {ultimosMensajes.map((m) => (
                   <tr key={m.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2.5 font-medium text-gray-900 truncate max-w-[140px]">{m.producto_nombre}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-900 truncate max-w-35">{m.producto_nombre}</td>
                     <td className="px-4 py-2.5 text-gray-500 hidden md:table-cell">{m.tienda_nombre}</td>
-                    <td className="px-4 py-2.5 text-gray-400 text-xs hidden md:table-cell truncate max-w-[120px]">{m.grupo_jid}</td>
+                    <td className="px-4 py-2.5 text-gray-400 text-xs hidden md:table-cell truncate max-w-30">{m.grupo_jid}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1">
                         {mensajeEstadoIcon(m.estado)}
