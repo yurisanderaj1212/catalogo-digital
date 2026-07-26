@@ -35,7 +35,7 @@ const defaultConfig = {
   intervalo_horas: 4,
   hora_inicio: '08:00',
   hora_fin: '20:00',
-  productos_por_ciclo: 5,
+  productos_por_ciclo: null as number | null,
   modo_seleccion: 'rotacion' as 'rotacion' | 'aleatorio' | 'manual',
 };
 
@@ -81,7 +81,9 @@ export default function ConfiguracionPage() {
           intervalo_horas: t.config.intervalo_horas ?? defaultConfig.intervalo_horas,
           hora_inicio: utcALocal(t.config.hora_inicio?.slice(0, 5) ?? '13:00'),
           hora_fin: utcALocal(t.config.hora_fin?.slice(0, 5) ?? '01:00'),
-          productos_por_ciclo: t.config.productos_por_ciclo ?? defaultConfig.productos_por_ciclo,
+          productos_por_ciclo: t.config.productos_por_ciclo && t.config.productos_por_ciclo > 0
+            ? t.config.productos_por_ciclo
+            : null,
           modo_seleccion: t.config.modo_seleccion as 'rotacion' | 'aleatorio' | 'manual',
         } : { ...defaultConfig };
       });
@@ -109,7 +111,7 @@ export default function ConfiguracionPage() {
         intervalo_horas: form.intervalo_horas,
         hora_inicio: localAUtc(form.hora_inicio),
         hora_fin: localAUtc(form.hora_fin),
-        productos_por_ciclo: form.productos_por_ciclo,
+        productos_por_ciclo: form.productos_por_ciclo ?? null,
         modo_seleccion: form.modo_seleccion,
         updated_at: new Date().toISOString(),
       };
@@ -361,12 +363,18 @@ export default function ConfiguracionPage() {
                 {/* Productos por ciclo */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Productos/ciclo</label>
-                  <input type="number" min={1} max={20} value={form.productos_por_ciclo || ''}
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.productos_por_ciclo ?? ''}
+                    placeholder="Todos"
                     onChange={(e) => {
-                      const v = parseInt(e.target.value);
-                      if (!isNaN(v) && v >= 1) update(t.id, 'productos_por_ciclo', v);
+                      const v = e.target.value === '' ? null : parseInt(e.target.value);
+                      update(t.id, 'productos_por_ciclo', v === null ? null : (isNaN(v) || v < 1 ? null : v));
                     }}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Vacío = publicar todos</p>
                 </div>
               </div>
 
