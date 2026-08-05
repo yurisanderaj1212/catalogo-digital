@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, Tienda } from '@/lib/supabase';
-import { CheckCircle, XCircle, Clock, TrendingUp, Send, Filter, Trash2, Search, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, TrendingUp, Send, Filter, Trash2, Search, AlertTriangle, RefreshCw } from 'lucide-react';
 
-type TabType = 'envios' | 'precios' | 'borrar';
+type TabType = 'envios' | 'precios' | 'borrar' | 'republicar';
 
 const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
 const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
@@ -28,17 +28,29 @@ export default function HistorialPage() {
   const [borrando, setBorrando] = useState(false);
   const [mensajeOp, setMensajeOp] = useState('');
 
+  // ── Estado de republicar ──
+  const [republicables, setRepublicables] = useState<any[]>([]);
+  const [loadingRepublicables, setLoadingRepublicables] = useState(false);
+  const [busquedaRep, setBusquedaRep] = useState('');
+  const [filtroTiendaRep, setFiltroTiendaRep] = useState('');
+  const [seleccionadosRep, setSeleccionadosRep] = useState<Set<string>>(new Set());
+  const [republicando, setRepublicando] = useState(false);
+
   useEffect(() => {
     supabase.from('tiendas').select('*').eq('activa', true).order('nombre').then(({ data }) => setTiendas(data || []));
   }, []);
 
   useEffect(() => {
-    if (tab !== 'borrar') fetchData();
+    if (tab !== 'borrar' && tab !== 'republicar') fetchData();
   }, [tab, filtroTienda, pagina]);
 
   useEffect(() => {
     if (tab === 'borrar') fetchBorrables();
   }, [tab, filtroTiendaBorrar]);
+
+  useEffect(() => {
+    if (tab === 'republicar') fetchRepublicables();
+  }, [tab, filtroTiendaRep]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -97,6 +109,89 @@ export default function HistorialPage() {
   const borrablesFiltrados = borrables.filter((b) =>
     busqueda === '' || b.producto_nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
+
+  const fetchRepublicables = useCallback(async () => {
+    setLoadingRepublicables(true);
+    setSeleccionadosRep(new Set());
+    try {
+      let query = supabase
+        .from('productos_tiendas')
+        .select('*, tiendas(id, nombre), productos(id, nombre, disponible)');
+      if (filtroTiendaRep) query = query.eq('tienda_id', filtroTiendaRep);
+      const { data } = await query;
+      const lista = (data || [])
+        .map((r: any) => ({
+          id: `${r.producto_id}_${r.tienda_id}`,
+          producto_id: r.producto_id,
+          tienda_id: r.tienda_id,
+          producto_nombre: r.productos?.nombre ?? '—',
+          tienda_nombre: r.tiendas?.nombre ?? '—',
+          disponible: r.productos?.disponible,
+        }))
+        .sort((a: any, b: any) => a.producto_nombre.localeCompare(b.producto_nombre));
+      setRepublicables(lista);
+    } catch (err) {
+      console.error('Error:', err);
+    } finally {
+      setLoadingRepublicables(false);
+    }
+  }, [filtroTiendaRep]);
+
+  const republicablesFiltrados = republicables.filter((r) =>
+    busquedaRep === '' || r.producto_nombre.toLowerCase().includes(busquedaRep.toLowerCase())
+  );
+
+  const toggleSeleccionRep = (id: string) => {
+    setSeleccionadosRep((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTodosRep = () => {
+    if (seleccionadosRep.size === republicablesFiltrados.length) {
+      setSeleccionadosRep(new Set());
+    } else {
+      setSeleccionadosRep(new Set(republicablesFiltrados.map((r) => r.id)));
+    }
+  };
+
+  const ejecutarRepublicar = async () => {
+    if (seleccionadosRep.size === 0) return;
+    // Agrupar por tienda → { tiendaId: Set<productoId> }
+    const porTienda = new Map<string, Set<string>>();
+    for (const id of seleccionadosRep) {
+      const item = republicables.find((r) => r.id === id);
+      if (!item) continue;
+      if (!porTienda.has(item.tienda_id)) porTienda.set(item.tienda_id, new Set());
+      porTienda.get(item.tienda_id)!.add(item.producto_id);
+    }
+    setRepublicando(true);
+    try {
+      let totalProductos = 0;
+      let totalGrupos = 0;
+      for (const [tiendaId, productoIds] of porTienda) {
+        const res = await fetch(`${BOT_URL}/api/republicar/${tiendaId}`, {
+          method: 'POST',
+          headers: { 'x-bot-secret': BOT_SECRET, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productoIds: Array.from(productoIds) }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error en el bot');
+        totalProductos += data.productos ?? 0;
+        totalGrupos = Math.max(totalGrupos, data.grupos ?? 0);
+      }
+      setMensajeOp(`✅ ${totalProductos} producto(s) encolados en ${totalGrupos} grupo(s)`);
+      setSeleccionadosRep(new Set());
+      setTimeout(() => setMensajeOp(''), 5000);
+    } catch (err: any) {
+      setMensajeOp(`Error: ${err.message}`);
+      setTimeout(() => setMensajeOp(''), 4000);
+    } finally {
+      setRepublicando(false);
+    }
+  };
 
   const toggleSeleccion = (id: string) => {
     setSeleccionados((prev) => {
@@ -175,6 +270,10 @@ export default function HistorialPage() {
         <button onClick={() => setTab('borrar')}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'borrar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
           <Trash2 className="w-3.5 h-3.5" /> Borrado selectivo
+        </button>
+        <button onClick={() => setTab('republicar')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'republicar' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          <RefreshCw className="w-3.5 h-3.5" /> Republicar
         </button>
       </div>
 
@@ -297,6 +396,128 @@ export default function HistorialPage() {
           {!loadingBorrables && borrablesFiltrados.length > 0 && (
             <p className="text-xs text-gray-400 text-right">
               {borrablesFiltrados.length} mensaje{borrablesFiltrados.length !== 1 ? 's' : ''} borrables encontrados
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: REPUBLICAR ── */}
+      {tab === 'republicar' && (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-4 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">
+            <RefreshCw className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold mb-1">Republicar productos en WhatsApp</p>
+              <p className="text-xs leading-relaxed">
+                Selecciona uno o varios productos y se encolarán para publicarse en todos los grupos activos de su tienda con los delays anti-ban habituales.
+              </p>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre de producto"
+                value={busquedaRep}
+                onChange={(e) => setBusquedaRep(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+              <select
+                value={filtroTiendaRep}
+                onChange={(e) => setFiltroTiendaRep(e.target.value)}
+                className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Todas las tiendas</option>
+                {tiendas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Barra de acción */}
+          {seleccionadosRep.size > 0 && (
+            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+              <span className="text-sm font-medium text-green-800">
+                {seleccionadosRep.size} producto{seleccionadosRep.size > 1 ? 's' : ''} seleccionado{seleccionadosRep.size > 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={ejecutarRepublicar}
+                disabled={republicando}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${republicando ? 'animate-spin' : ''}`} />
+                {republicando ? 'Encolando...' : 'Republicar seleccionados'}
+              </button>
+            </div>
+          )}
+
+          {/* Tabla */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {loadingRepublicables ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
+              </div>
+            ) : republicablesFiltrados.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-gray-400">
+                <RefreshCw className="w-8 h-8 mb-2" />
+                <p className="text-sm">
+                  {busquedaRep ? `No hay productos que coincidan con "${busquedaRep}"` : 'No hay productos disponibles'}
+                </p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-2.5 w-10">
+                      <input
+                        type="checkbox"
+                        checked={seleccionadosRep.size === republicablesFiltrados.length && republicablesFiltrados.length > 0}
+                        onChange={toggleTodosRep}
+                        className="w-4 h-4 text-green-600 rounded"
+                      />
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Producto</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 hidden md:table-cell">Tienda</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 hidden sm:table-cell">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {republicablesFiltrados.map((r) => (
+                    <tr
+                      key={r.id}
+                      onClick={() => toggleSeleccionRep(r.id)}
+                      className={`cursor-pointer transition-colors ${seleccionadosRep.has(r.id) ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={seleccionadosRep.has(r.id)}
+                          onChange={() => toggleSeleccionRep(r.id)}
+                          className="w-4 h-4 text-green-600 rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{r.producto_nombre}</td>
+                      <td className="px-4 py-2.5 text-gray-500 hidden md:table-cell">{r.tienda_nombre}</td>
+                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.disponible ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {r.disponible ? 'Disponible' : 'Agotado'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {!loadingRepublicables && republicablesFiltrados.length > 0 && (
+            <p className="text-xs text-gray-400 text-right">
+              {republicablesFiltrados.length} producto{republicablesFiltrados.length !== 1 ? 's' : ''} encontrados
             </p>
           )}
         </div>
