@@ -157,8 +157,18 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     }
   };
 
-  const eliminarImagen = (index: number) => {
+  const eliminarImagen = async (index: number) => {
+    const url = imagenes[index];
     setImagenes(imagenes.filter((_, i) => i !== index));
+    // Borrar de Cloudinary en background (no bloquea la UI)
+    if (url?.includes('cloudinary.com')) {
+      const token = localStorage.getItem('auth_token');
+      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}/cloudinary/borrar-imagen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ url }),
+      }).catch(err => console.warn('No se pudo borrar imagen de Cloudinary:', err));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
