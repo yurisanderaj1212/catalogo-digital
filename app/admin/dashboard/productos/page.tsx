@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, Producto, Tienda, Categoria } from '@/lib/supabase';
 import { Plus, Edit, Trash2, Package, Search, Filter } from 'lucide-react';
+import { optimizarUrl } from '@/lib/cloudinary';
 import ModalConfirmar from '../../components/ModalConfirmar';
 import ModalProducto from '../../components/ModalProducto';
 
@@ -246,7 +247,7 @@ export default function ProductosPage() {
               <div className="aspect-square bg-gray-100 relative">
                 {producto.imagenes && producto.imagenes.length > 0 ? (
                   <img
-                    src={producto.imagenes[0].url_imagen}
+                    src={optimizarUrl(producto.imagenes[0].url_imagen, 120)}
                     alt={producto.nombre}
                     loading="lazy"
                     className="w-full h-full object-cover"

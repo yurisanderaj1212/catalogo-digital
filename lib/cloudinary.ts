@@ -81,3 +81,16 @@ export function getCloudinaryUrl(
 export function isCloudinaryUrl(url: string): boolean {
   return url.includes('cloudinary.com');
 }
+
+/**
+ * Optimiza una URL completa de Cloudinary inyectando transformaciones.
+ * Funciona con las URLs que ya están guardadas en la DB.
+ * @param url - URL completa de Cloudinary
+ * @param ancho - Ancho máximo en px (default 400 para thumbnails)
+ */
+export function optimizarUrl(url: string, ancho = 400): string {
+  if (!url || !url.includes('cloudinary.com')) return url;
+  // Evitar inyectar transformaciones duplicadas
+  if (url.includes('/upload/w_') || url.includes('/upload/q_')) return url;
+  return url.replace('/upload/', `/upload/w_${ancho},q_auto,f_auto/`);
+}

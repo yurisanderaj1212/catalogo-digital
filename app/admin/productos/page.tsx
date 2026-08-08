@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, Producto, Tienda, Categoria } from '@/lib/supabase';
 import { Plus, Edit, Trash2, Package, Search, Filter } from 'lucide-react';
+import { optimizarUrl } from '@/lib/cloudinary';
 
 interface ProductoExtendido extends Producto {
   tienda?: Tienda;
@@ -157,7 +158,7 @@ export default function ProductosPage() {
               <div className="aspect-square bg-gray-100 relative">
                 {producto.imagenes && producto.imagenes.length > 0 ? (
                   <img
-                    src={producto.imagenes[0].url_imagen}
+                    src={optimizarUrl(producto.imagenes[0].url_imagen, 120)}
                     alt={producto.nombre}
                     className="w-full h-full object-cover"
                   />
