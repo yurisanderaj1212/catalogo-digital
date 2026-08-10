@@ -38,8 +38,8 @@ export default function SesionesPage() {
   const [guardandoDelegacion, setGuardandoDelegacion] = useState(false);
 
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (mostrarLoading = false) => {
+    if (mostrarLoading) setLoading(true);
     try {
       const [tiendasRes, sessionsRes] = await Promise.all([
         supabase.from('tiendas').select('*').eq('activa', true).order('nombre'),
@@ -59,8 +59,8 @@ export default function SesionesPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30_000);
+    fetchData(true);
+    const interval = setInterval(() => fetchData(false), 30_000);
     return () => clearInterval(interval);
   }, [fetchData]);
 

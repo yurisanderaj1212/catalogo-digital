@@ -98,7 +98,6 @@ export default function AutomatizacionPage() {
     const interval = setInterval(() => { fetchData(); fetchBotStatus(); }, 30_000);
     return () => clearInterval(interval);
   }, [fetchData, fetchBotStatus]);
-
   const estadoColor = (estado: string | undefined) => {
     if (estado === 'conectado') return 'text-green-600 bg-green-50 border-green-200';
     if (estado === 'esperando_qr') return 'text-yellow-600 bg-yellow-50 border-yellow-200';
