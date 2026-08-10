@@ -109,49 +109,25 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
   const subirImagenDesdePC = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Validar tipo de archivo
-    if (!file.type.startsWith('image/')) {
-      alert('Por favor selecciona un archivo de imagen válido');
-      return;
-    }
-
-    // Validar tamaño (máximo 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen no debe superar los 5MB');
-      return;
-    }
+    if (!file.type.startsWith('image/')) { alert('Selecciona un archivo de imagen válido'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('La imagen no debe superar los 10MB'); return; }
 
     setSubiendoImagen(true);
     try {
-      // Subir a Cloudinary
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'productos_preset');
-      formData.append('folder', 'productos');
-      
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Error al subir imagen a Cloudinary');
-      }
-
+      const token = localStorage.getItem('auth_token');
+      const fd = new FormData();
+      fd.append('file', file);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}/assets/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: fd,
+      });
+      if (!response.ok) throw new Error('Error al subir imagen');
       const data = await response.json();
-      
-      // Agregar URL optimizada a la lista de imágenes
       setImagenes([...imagenes, data.secure_url]);
-      
-      // Resetear input
       e.target.value = '';
     } catch (error: any) {
-      console.error('Error al subir imagen:', error);
-      alert(error.message || 'Error al subir la imagen. Verifica tu conexión.');
+      alert(error.message || 'Error al subir la imagen');
     } finally {
       setSubiendoImagen(false);
     }
@@ -160,15 +136,12 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
   const eliminarImagen = async (index: number) => {
     const url = imagenes[index];
     setImagenes(imagenes.filter((_, i) => i !== index));
-    // Borrar de Cloudinary en background (no bloquea la UI)
-    if (url?.includes('cloudinary.com')) {
-      const token = localStorage.getItem('auth_token');
-      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}/cloudinary/borrar-imagen`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ url }),
-      }).catch(err => console.warn('No se pudo borrar imagen de Cloudinary:', err));
-    }
+    const token = localStorage.getItem('auth_token');
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}/assets/borrar`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ url }),
+    }).catch(err => console.warn('No se pudo borrar imagen:', err));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

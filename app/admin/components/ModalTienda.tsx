@@ -107,29 +107,19 @@ export default function ModalTienda({ tienda, onClose, onSuccess }: ModalTiendaP
 
   const uploadLogoToSupabase = async (): Promise<string | null> => {
     if (!logoFile) return null;
-
     setUploadingLogo(true);
     try {
-      // Subir a Cloudinary en lugar de Supabase
-      const formData = new FormData();
-      formData.append('file', logoFile);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'productos_preset');
-      formData.append('folder', 'logos');
-      
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Error al subir imagen a Cloudinary');
-      }
-
+      const token = localStorage.getItem('auth_token');
+      const fd = new FormData();
+      fd.append('file', logoFile);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}/assets/logos/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: fd,
+      });
+      if (!response.ok) throw new Error('Error al subir logo');
       const data = await response.json();
-      return data.secure_url; // URL HTTPS optimizada
+      return data.secure_url;
     } catch (err) {
       console.error('Error al subir logo:', err);
       setError('Error al subir el logo. Verifica tu conexión.');
