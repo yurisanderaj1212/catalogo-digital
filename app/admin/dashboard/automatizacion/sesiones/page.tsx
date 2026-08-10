@@ -195,7 +195,7 @@ export default function SesionesPage() {
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">Vincula un número por tienda, o delega a la sesión de otra.</p>
-        <button onClick={fetchData} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
+        <button onClick={() => fetchData(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
           <RefreshCw className="w-3 h-3" /> Actualizar
         </button>
       </div>
