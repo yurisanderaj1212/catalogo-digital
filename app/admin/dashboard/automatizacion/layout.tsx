@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Smartphone, Settings, DollarSign, History, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Smartphone, Settings, DollarSign, History, MessageSquare, LogOut } from 'lucide-react';
 
 const tabs = [
   { icon: LayoutDashboard, label: 'Dashboard',      href: '/admin/dashboard/automatizacion' },
@@ -11,6 +11,7 @@ const tabs = [
   { icon: DollarSign,      label: 'Precios',        href: '/admin/dashboard/automatizacion/precios' },
   { icon: History,         label: 'Historial',      href: '/admin/dashboard/automatizacion/historial' },
   { icon: MessageSquare,   label: 'Bienvenida',     href: '/admin/dashboard/automatizacion/bienvenida' },
+  { icon: LogOut,          label: 'Cierre',         href: '/admin/dashboard/automatizacion/cierre' },
 ];
 
 export default function AutomatizacionLayout({ children }: { children: React.ReactNode }) {

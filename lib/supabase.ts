@@ -31,6 +31,7 @@ export interface Tienda {
   hora_cierre: string | null;
   dias_laborales: string[] | null;
   mensaje_bienvenida: string | null;
+  mensaje_cierre: string | null;
 }
 
 export interface Categoria {
