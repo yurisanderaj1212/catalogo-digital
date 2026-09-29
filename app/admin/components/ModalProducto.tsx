@@ -228,8 +228,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-xl max-w-3xl w-full max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties} onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
           <h2 className="text-lg font-bold text-gray-900">
             {producto ? 'Editar Producto' : 'Nuevo Producto'}

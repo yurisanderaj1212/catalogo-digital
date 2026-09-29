@@ -11,6 +11,21 @@ body {
   font-family: var(--font-inter, system-ui, -apple-system, sans-serif);
 }
 
+/* iOS fix: evita el zoom automático al enfocar inputs con font-size < 16px */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="time"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
