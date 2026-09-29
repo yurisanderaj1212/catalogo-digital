@@ -60,8 +60,8 @@ export default function SesionesPage() {
 
   useEffect(() => {
     fetchData(true);
-    const interval = setInterval(() => fetchData(false), 30_000);
-    return () => clearInterval(interval);
+    // Sin refresco automático — esta es una página de configuración, no de monitoreo.
+    // El usuario puede refrescar manualmente con el botón Actualizar.
   }, [fetchData]);
 
   const mostrarMensaje = (msg: string) => {

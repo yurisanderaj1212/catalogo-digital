@@ -45,7 +45,7 @@ export default function AutomatizacionPage() {
     try {
       const res = await fetch(`${BOT_URL}/api/status`, {
         headers: { 'x-bot-secret': BOT_SECRET },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(3000),
       });
       if (res.ok) {
         const data = await res.json();
@@ -95,8 +95,10 @@ export default function AutomatizacionPage() {
   useEffect(() => {
     fetchData();
     fetchBotStatus();
-    const interval = setInterval(() => { fetchData(); fetchBotStatus(); }, 30_000);
-    return () => clearInterval(interval);
+    // Refresco cada 60s — la DB es rápida, el bot tarda más cuando está desconectado
+    const intervalDB  = setInterval(() => fetchData(), 60_000);
+    const intervalBot = setInterval(() => fetchBotStatus(), 60_000);
+    return () => { clearInterval(intervalDB); clearInterval(intervalBot); };
   }, [fetchData, fetchBotStatus]);
   const estadoColor = (estado: string | undefined) => {
     if (estado === 'conectado') return 'text-green-600 bg-green-50 border-green-200';
