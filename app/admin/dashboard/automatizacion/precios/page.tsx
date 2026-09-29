@@ -239,20 +239,27 @@ export default function PreciosPage() {
 
   const notificarAgotados = async () => {
     if (productosAgotados.length === 0) return;
-    // Verificar que todos tienen tienda seleccionada
     const sinTienda = productosAgotados.filter(p => !tiendaSeleccionadaAgotado[p.id]);
     if (sinTienda.length > 0) {
       mostrarMensaje(`Selecciona la tienda para: ${sinTienda.map(p => p.nombre).join(', ')}`);
       return;
     }
     setEnviandoAgotado(true);
-    let totalEnviados = 0;
-    for (const producto of productosAgotados) {
+
+    // Lanzar todas las peticiones en paralelo — el bot envía el sticker en background
+    // No esperamos que termine el envío, solo que la petición fue aceptada
+    const peticiones = productosAgotados.map(async (producto) => {
       const tiendaId = tiendaSeleccionadaAgotado[producto.id];
-      const res = await llamarBot(`/api/agotado/${tiendaId}`, { productoId: producto.id });
-      if (res?.ok) totalEnviados += res.enviados ?? 0;
-    }
-    mostrarMensaje(`${productosAgotados.length} producto(s) agotado(s) — ${totalEnviados} grupos notificados`);
+      try {
+        await llamarBot(`/api/agotado/${tiendaId}`, { productoId: producto.id });
+      } catch {
+        // Silenciar errores individuales — el bot loguea internamente
+      }
+    });
+
+    await Promise.all(peticiones);
+
+    mostrarMensaje(`${productosAgotados.length} producto(s) marcado(s) como agotado(s) — el bot notificará a los grupos en background`);
     setProductosAgotados([]);
     setTextoAgotado('');
     setTiendaSeleccionadaAgotado({});
