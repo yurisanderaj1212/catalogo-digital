@@ -93,12 +93,14 @@ export default function AutomatizacionPage() {
   }, []);
 
   useEffect(() => {
+    // Cargar datos de DB inmediatamente — no esperar al bot
     fetchData();
-    fetchBotStatus();
-    // Refresco cada 60s — la DB es rápida, el bot tarda más cuando está desconectado
+    // Cargar estado del bot en background con pequeño delay para no bloquear render inicial
+    const botTimer = setTimeout(() => fetchBotStatus(), 500);
+    // Refrescos independientes
     const intervalDB  = setInterval(() => fetchData(), 60_000);
     const intervalBot = setInterval(() => fetchBotStatus(), 60_000);
-    return () => { clearInterval(intervalDB); clearInterval(intervalBot); };
+    return () => { clearTimeout(botTimer); clearInterval(intervalDB); clearInterval(intervalBot); };
   }, [fetchData, fetchBotStatus]);
   const estadoColor = (estado: string | undefined) => {
     if (estado === 'conectado') return 'text-green-600 bg-green-50 border-green-200';
