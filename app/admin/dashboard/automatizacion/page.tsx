@@ -37,11 +37,12 @@ export default function AutomatizacionPage() {
     try {
       const [tiendasRes, sessionsRes, schedulersRes, mensajesRes, pendientesRes] = await Promise.all([
         supabase.from('tiendas').select('*').eq('activa', true).order('nombre'),
-        supabase.from('wa_sessions').select('*'),
+        // Excluir auth_data y qr_actual — campos pesados no usados en el frontend
+        supabase.from('wa_sessions').select('id,tienda_id,numero_telefono,estado,ultimo_ping,sesion_maestra_id,created_at'),
         supabase.from('scheduler_config').select('*'),
         supabase.from('mensajes_log').select('id, tienda_id, grupo_jid, estado, error_msg, created_at, enviado_at, tiendas(nombre), productos(nombre)')
           .order('created_at', { ascending: false }).limit(5),
-        supabase.from('price_change_log').select('id').eq('estado', 'pendiente'),
+        supabase.from('price_change_log').select('id').eq('estado', 'pendiente').withCount(),
       ]);
       const tiendasData = tiendasRes.data || [];
       const sessions = sessionsRes.data || [];
@@ -51,7 +52,7 @@ export default function AutomatizacionPage() {
         session: sessions.find((s: WaSession) => s.tienda_id === t.id) ?? null,
         scheduler: schedulers.find((s: SchedulerConfig) => s.tienda_id === t.id) ?? null,
       })));
-      setPendientes((pendientesRes.data ?? []).length);
+      setPendientes(pendientesRes.count ?? 0);
       setUltimosMensajes((mensajesRes.data || []).map((m: any) => ({
         ...m,
         tienda_nombre: m.tiendas?.nombre ?? '—',

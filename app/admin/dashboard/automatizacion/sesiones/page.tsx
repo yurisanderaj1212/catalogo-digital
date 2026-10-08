@@ -42,8 +42,10 @@ export default function SesionesPage() {
     if (mostrarLoading) setLoading(true);
     try {
       const [tiendasRes, sessionsRes] = await Promise.all([
-        supabase.from('tiendas').select('*').eq('activa', true).order('nombre'),
-        supabase.from('wa_sessions').select('*'),
+        supabase.from('tiendas').select('id,nombre,activa').eq('activa', true).order('nombre'),
+        // Excluir auth_data y qr_actual — son campos binarios pesados (hasta 78 MB total)
+        // que el frontend no necesita. Solo se leen desde el bot-service.
+        supabase.from('wa_sessions').select('id,tienda_id,numero_telefono,estado,ultimo_ping,sesion_maestra_id,created_at'),
       ]);
       const tiendasData = tiendasRes.data || [];
       const sessions = sessionsRes.data || [];

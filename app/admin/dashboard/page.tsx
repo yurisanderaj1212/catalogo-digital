@@ -20,17 +20,17 @@ export default function DashboardPage() {
   const fetchStats = async () => {
     try {
       const [tiendas, productos, categorias, productosActivos] = await Promise.all([
-        supabase.from('tiendas').select('id'),
-        supabase.from('productos').select('id'),
-        supabase.from('categorias').select('id'),
-        supabase.from('productos').select('id').eq('activo', true).eq('disponible', true),
+        supabase.from('tiendas').select('id').withCount(),
+        supabase.from('productos').select('id').withCount(),
+        supabase.from('categorias').select('id').withCount(),
+        supabase.from('productos').select('id').eq('activo', true).eq('disponible', true).withCount(),
       ]);
 
       setStats({
-        tiendas: tiendas.data?.length || 0,
-        productos: productos.data?.length || 0,
-        categorias: categorias.data?.length || 0,
-        productosActivos: productosActivos.data?.length || 0,
+        tiendas: tiendas.count ?? 0,
+        productos: productos.count ?? 0,
+        categorias: categorias.count ?? 0,
+        productosActivos: productosActivos.count ?? 0,
       });
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);

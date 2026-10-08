@@ -146,6 +146,8 @@ interface QueryBuilder<T> {
   limit(n: number): QueryBuilder<T>;
   offset(n: number): QueryBuilder<T>;
   range(from: number, to: number): QueryBuilder<T>;
+  /** Activa el modo count-only: retorna { data: [], count: N } sin traer filas */
+  withCount(): QueryBuilder<T>;
   single(): Promise<{ data: T | null; error: string | null; count?: number }>;
   then(resolve: (result: { data: T[] | null; error: string | null; count?: number | null }) => void): void;
 }
@@ -162,6 +164,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     onConflict: string | null;
     headOnly: boolean;
     count: boolean;
+    countOnly: boolean;
   } = {
     operation: 'select',
     columns: '*',
@@ -173,6 +176,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     onConflict: null,
     headOnly: false,
     count: false,
+    countOnly: false,
   };
 
   const execute = async (): Promise<{ data: T[] | null; error: string | null; count?: number | null }> => {
@@ -182,12 +186,12 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
       columns: state.columns,
       filters: state.filters,
       orderBy: state.orderBy,
-      limit: state.limitN,
+      limit: state.countOnly ? 0 : state.limitN,
       offset: state.offsetN,
       body: state.body,
       onConflict: state.onConflict,
       headOnly: state.headOnly,
-      count: state.count,
+      count: state.count || state.countOnly,
     };
 
     const { data, error } = await apiFetch<{ rows: T[]; count?: number }>(
@@ -196,7 +200,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     );
 
     if (error) return { data: null, error, count: null };
-    return { data: data?.rows ?? null, error: null, count: data?.count ?? null };
+    return { data: state.countOnly ? [] : (data?.rows ?? null), error: null, count: data?.count ?? null };
   };
 
   const builder: QueryBuilder<T> = {
@@ -229,6 +233,7 @@ function buildQuery<T>(table: string): QueryBuilder<T> {
     limit(n) { state.limitN = n; return builder; },
     offset(n) { state.offsetN = n; return builder; },
     range(from, to) { state.offsetN = from; state.limitN = to - from + 1; return builder; },
+    withCount() { state.countOnly = true; state.count = true; return builder; },
     async single() {
       state.limitN = 1;
       const result = await execute();
