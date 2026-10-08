@@ -157,21 +157,11 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     setLoading(true);
 
     try {
-      const precioNum = parseFloat(formData.precio);
-      // precio_por_libra:
-      //   lb    → el precio ingresado ya ES el precio/lb, se guarda directo
-      //   ambos → el precio ingresado es precio/kg, se convierte
-      //   kg    → no aplica
-      const precio_por_libra =
-        formData.unidad_peso === 'lb'    ? precioNum :
-        formData.unidad_peso === 'ambos' ? parseFloat((precioNum / 2.205).toFixed(2)) :
-        null;
-
       const dataToSave = {
         ...formData,
-        precio: precioNum,
-        precio_por_libra,
+        precio: parseFloat(formData.precio),
         tienda_id: tiendasSeleccionadas[0],
+        categoria_id: formData.categoria_id !== '' ? formData.categoria_id : null,
         unidades_por_caja: formData.unidades_por_caja !== '' ? parseInt(formData.unidades_por_caja) : null,
         unidad_peso: formData.unidad_peso !== '' ? formData.unidad_peso : null,
       };
