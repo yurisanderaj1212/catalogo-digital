@@ -58,7 +58,7 @@ export default function HistorialPage() {
       if (tab === 'envios') {
         let query = supabase
           .from('mensajes_log')
-          .select('*, tiendas(nombre), productos(nombre)')
+          .select('id, tienda_id, grupo_jid, estado, error_msg, created_at, enviado_at, tiendas(nombre), productos(nombre)')
           .order('created_at', { ascending: false })
           .range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1);
         if (filtroTienda) query = query.eq('tienda_id', filtroTienda);
@@ -87,7 +87,7 @@ export default function HistorialPage() {
       const hace55h = new Date(Date.now() - 55 * 60 * 60 * 1000).toISOString();
       let query = supabase
         .from('mensajes_log')
-        .select('*, tiendas(nombre), productos(nombre)')
+        .select('id, tienda_id, grupo_jid, estado, error_msg, wa_message_key, enviado_at, tiendas(nombre), productos(nombre)')
         .eq('estado', 'enviado')
         .not('wa_message_key', 'is', null)
         .gte('enviado_at', hace55h)

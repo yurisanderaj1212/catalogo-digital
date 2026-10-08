@@ -39,7 +39,7 @@ export default function AutomatizacionPage() {
         supabase.from('tiendas').select('*').eq('activa', true).order('nombre'),
         supabase.from('wa_sessions').select('*'),
         supabase.from('scheduler_config').select('*'),
-        supabase.from('mensajes_log').select('*, tiendas(nombre), productos(nombre)')
+        supabase.from('mensajes_log').select('id, tienda_id, grupo_jid, estado, error_msg, created_at, enviado_at, tiendas(nombre), productos(nombre)')
           .order('created_at', { ascending: false }).limit(5),
         supabase.from('price_change_log').select('id').eq('estado', 'pendiente'),
       ]);
