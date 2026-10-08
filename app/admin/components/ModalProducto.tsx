@@ -157,9 +157,20 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     setLoading(true);
 
     try {
+      const precioNum = parseFloat(formData.precio);
+      // precio_por_libra:
+      //   lb    → el precio ingresado ya ES el precio/lb, se guarda directo
+      //   ambos → el precio ingresado es precio/kg, se convierte
+      //   kg    → no aplica
+      const precio_por_libra =
+        formData.unidad_peso === 'lb'    ? precioNum :
+        formData.unidad_peso === 'ambos' ? parseFloat((precioNum / 2.205).toFixed(2)) :
+        null;
+
       const dataToSave = {
         ...formData,
-        precio: parseFloat(formData.precio),
+        precio: precioNum,
+        precio_por_libra,
         tienda_id: tiendasSeleccionadas[0],
         unidades_por_caja: formData.unidades_por_caja !== '' ? parseInt(formData.unidades_por_caja) : null,
         unidad_peso: formData.unidad_peso !== '' ? formData.unidad_peso : null,
@@ -382,8 +393,11 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                   {(formData.unidad_peso === 'kg' || formData.unidad_peso === 'ambos') && (
                     <p className="text-xs text-blue-600 font-medium">Precio/kg: ${parseFloat(formData.precio).toLocaleString('es-CU')} {formData.moneda}</p>
                   )}
-                  {(formData.unidad_peso === 'lb' || formData.unidad_peso === 'ambos') && (
-                    <p className="text-xs text-green-600 font-medium">Precio/lb: ${(parseFloat(formData.precio) / 2.205).toFixed(0)} {formData.moneda}</p>
+                  {formData.unidad_peso === 'ambos' && (
+                    <p className="text-xs text-green-600 font-medium">Precio/lb: ${(parseFloat(formData.precio) / 2.205).toFixed(2)} {formData.moneda} (calculado)</p>
+                  )}
+                  {formData.unidad_peso === 'lb' && (
+                    <p className="text-xs text-green-600 font-medium">Precio/lb: ${parseFloat(formData.precio).toLocaleString('es-CU')} {formData.moneda}</p>
                   )}
                 </div>
               )}
