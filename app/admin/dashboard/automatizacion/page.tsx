@@ -17,14 +17,6 @@ interface MensajeConNombres extends MensajeLog {
   producto_nombre?: string;
 }
 
-interface BotStatus {
-  ok: boolean;
-  sesiones: Record<string, string>; // tiendaId → 'conectado'|'desconectado'
-  jobs_activos: string[];           // tiendaIds con cron activo
-}
-
-// Convierte hora UTC a hora Cuba (UTC-4 en verano, UTC-5 en invierno)
-// Ajustar OFFSET_HORAS cuando Cuba cambie de horario
 const OFFSET_HORAS_CUBA = -4;
 function utcALocal(horaUtc: string): string {
   const [h, m] = horaUtc.split(':').map(Number);
@@ -37,28 +29,10 @@ export default function AutomatizacionPage() {
   const [ultimosMensajes, setUltimosMensajes] = useState<MensajeConNombres[]>([]);
   const [pendientes, setPendientes] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
-  const [botOnline, setBotOnline] = useState<boolean | null>(null);
+  // Estado del proceso interno del bot — solo informativo, no bloquea la carga
+  const [botProceso, setBotProceso] = useState<{ online: boolean; jobsActivos: string[] } | null>(null);
 
-  const fetchBotStatus = useCallback(async () => {
-    if (!BOT_URL) return;
-    try {
-      const res = await fetch(`${BOT_URL}/api/status`, {
-        headers: { 'x-bot-secret': BOT_SECRET },
-        signal: AbortSignal.timeout(3000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setBotStatus(data);
-        setBotOnline(true);
-      } else {
-        setBotOnline(false);
-      }
-    } catch {
-      setBotOnline(false);
-    }
-  }, []);
-
+  // ── Carga principal desde DB — rápida, sin dependencia del bot ──
   const fetchData = useCallback(async () => {
     try {
       const [tiendasRes, sessionsRes, schedulersRes, mensajesRes, pendientesRes] = await Promise.all([
@@ -69,11 +43,9 @@ export default function AutomatizacionPage() {
           .order('created_at', { ascending: false }).limit(5),
         supabase.from('price_change_log').select('id').eq('estado', 'pendiente'),
       ]);
-
       const tiendasData = tiendasRes.data || [];
       const sessions = sessionsRes.data || [];
       const schedulers = schedulersRes.data || [];
-
       setTiendas(tiendasData.map((t) => ({
         ...t,
         session: sessions.find((s: WaSession) => s.tienda_id === t.id) ?? null,
@@ -92,16 +64,36 @@ export default function AutomatizacionPage() {
     }
   }, []);
 
+  // ── Estado del proceso interno del bot — en background, sin bloquear ──
+  const fetchBotProceso = useCallback(async () => {
+    if (!BOT_URL) return;
+    try {
+      const res = await fetch(`${BOT_URL}/api/status`, {
+        headers: { 'x-bot-secret': BOT_SECRET },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBotProceso({ online: true, jobsActivos: data.jobs_activos ?? [] });
+      } else {
+        setBotProceso({ online: false, jobsActivos: [] });
+      }
+    } catch {
+      setBotProceso({ online: false, jobsActivos: [] });
+    }
+  }, []);
+
   useEffect(() => {
-    // Cargar datos de DB inmediatamente — no esperar al bot
+    // DB carga inmediatamente
     fetchData();
-    // Cargar estado del bot en background con pequeño delay para no bloquear render inicial
-    const botTimer = setTimeout(() => fetchBotStatus(), 500);
-    // Refrescos independientes
+    // Bot en background — no bloquea render
+    const botTimer = setTimeout(() => fetchBotProceso(), 800);
+    // Refrescos cada 60s
     const intervalDB  = setInterval(() => fetchData(), 60_000);
-    const intervalBot = setInterval(() => fetchBotStatus(), 60_000);
+    const intervalBot = setInterval(() => fetchBotProceso(), 60_000);
     return () => { clearTimeout(botTimer); clearInterval(intervalDB); clearInterval(intervalBot); };
-  }, [fetchData, fetchBotStatus]);
+  }, [fetchData, fetchBotProceso]);
+
   const estadoColor = (estado: string | undefined) => {
     if (estado === 'conectado') return 'text-green-600 bg-green-50 border-green-200';
     if (estado === 'esperando_qr') return 'text-yellow-600 bg-yellow-50 border-yellow-200';
@@ -126,6 +118,18 @@ export default function AutomatizacionPage() {
     return <Clock className="w-4 h-4 text-yellow-500" />;
   };
 
+  // Contar sesiones conectadas desde DB (fuente de verdad)
+  const sesionesConectadas = tiendas.filter(t => {
+    const esDelegada = !!t.session?.sesion_maestra_id;
+    if (esDelegada) {
+      const maestra = tiendas.find(m => m.session?.id === t.session?.sesion_maestra_id);
+      return maestra?.session?.estado === 'conectado';
+    }
+    return t.session?.estado === 'conectado';
+  }).length;
+
+  const schedulersActivos = tiendas.filter(t => t.scheduler?.activo).length;
+
   if (loading) return (
     <div className="flex items-center justify-center h-48">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
@@ -135,41 +139,35 @@ export default function AutomatizacionPage() {
   return (
     <div className="space-y-6">
 
-      {/* Estado del bot-service */}
-      <div className={`flex items-center justify-between p-4 rounded-xl border ${
-        botOnline === null ? 'bg-gray-50 border-gray-200' :
-        botOnline ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-      }`}>
+      {/* Estado del bot-service — datos de DB + indicador de proceso */}
+      <div className="flex items-center justify-between p-4 rounded-xl border bg-green-50 border-green-200">
         <div className="flex items-center gap-3">
-          <Bot className={`w-5 h-5 ${botOnline ? 'text-green-600' : botOnline === false ? 'text-red-600' : 'text-gray-400'}`} />
+          <Bot className="w-5 h-5 text-green-600" />
           <div>
-            <p className={`text-sm font-semibold ${botOnline ? 'text-green-800' : botOnline === false ? 'text-red-800' : 'text-gray-600'}`}>
-              Bot-service: {botOnline === null ? 'Verificando...' : botOnline ? 'En línea' : 'Fuera de línea'}
+            <p className="text-sm font-semibold text-green-800">Bot-service</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {schedulersActivos} scheduler{schedulersActivos !== 1 ? 's' : ''} activo{schedulersActivos !== 1 ? 's' : ''}
+              {' · '}
+              {sesionesConectadas} sesión{sesionesConectadas !== 1 ? 'es' : ''} WA conectada{sesionesConectadas !== 1 ? 's' : ''}
+              {botProceso !== null && (
+                <span className={`ml-2 ${botProceso.online ? 'text-green-600' : 'text-red-500'}`}>
+                  · proceso {botProceso.online ? 'activo' : 'inactivo'}
+                </span>
+              )}
             </p>
-            {botStatus && (
-              <p className="text-xs text-gray-500 mt-0.5">
-                {botStatus.jobs_activos.length} scheduler{botStatus.jobs_activos.length !== 1 ? 's' : ''} activo{botStatus.jobs_activos.length !== 1 ? 's' : ''}
-                {' · '}
-                {Object.values(botStatus.sesiones).filter(s => s === 'conectado').length} sesión{Object.values(botStatus.sesiones).filter(s => s === 'conectado').length !== 1 ? 'es' : ''} WA conectada{Object.values(botStatus.sesiones).filter(s => s === 'conectado').length !== 1 ? 's' : ''}
-              </p>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {botStatus && (
-            <div className="flex gap-1">
-              {botStatus.jobs_activos.map((id) => {
-                const tienda = tiendas.find(t => t.id === id);
-                return (
-                  <span key={id} className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
-                    <Activity className="w-3 h-3" />
-                    {tienda?.nombre ?? id.slice(0, 8)}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <button onClick={() => { fetchData(); fetchBotStatus(); }}
+          {botProceso?.jobsActivos.map((id) => {
+            const tienda = tiendas.find(t => t.id === id);
+            return (
+              <span key={id} className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                <Activity className="w-3 h-3" />
+                {tienda?.nombre ?? id.slice(0, 8)}
+              </span>
+            );
+          })}
+          <button onClick={() => { fetchData(); fetchBotProceso(); }}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-white">
             <RefreshCw className="w-3 h-3" /> Actualizar
           </button>
@@ -187,23 +185,22 @@ export default function AutomatizacionPage() {
         </div>
       )}
 
-      {/* Estado de sesiones por tienda */}
+      {/* Estado de sesiones por tienda — 100% desde DB */}
       <div>
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Estado de conexiones</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {tiendas.map((t) => {
-            // Para sesiones delegadas, usar el estado de la tienda maestra
             const esDelegada = !!t.session?.sesion_maestra_id;
             const tiendaMaestra = esDelegada
               ? tiendas.find(m => m.session?.id === t.session?.sesion_maestra_id)
               : null;
-
-            // Estado real: bot > maestra (si delegada) > propio
-            const estadoBot = botStatus?.sesiones[t.id]
-              ?? (tiendaMaestra ? botStatus?.sesiones[tiendaMaestra.id] : undefined);
-            const estadoReal = estadoBot
-              ?? (tiendaMaestra ? tiendaMaestra.session?.estado : t.session?.estado);
-            const jobActivo = botStatus?.jobs_activos.includes(t.id) ?? false;
+            // Estado desde DB — wa_sessions.estado actualizado por el keepalive cada 8 min
+            const estadoReal = esDelegada
+              ? (tiendaMaestra?.session?.estado)
+              : t.session?.estado;
+            // Scheduler activo en proceso del bot (si disponible) o de DB
+            const jobActivo = botProceso?.jobsActivos.includes(t.id)
+              ?? (t.scheduler?.activo ?? false);
 
             return (
               <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -215,14 +212,12 @@ export default function AutomatizacionPage() {
                   </span>
                 </div>
 
-                {/* Mostrar número — propio o el de la maestra */}
                 {esDelegada && tiendaMaestra?.session?.numero_telefono ? (
                   <p className="text-xs text-blue-600 mb-2">🔗 vía {tiendaMaestra.nombre} · {tiendaMaestra.session.numero_telefono}</p>
                 ) : t.session?.numero_telefono ? (
                   <p className="text-xs text-gray-500 mb-2">📱 {t.session.numero_telefono}</p>
                 ) : null}
 
-                {/* Scheduler — estado real del bot */}
                 <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
                   jobActivo ? 'bg-green-50 text-green-700' :
                   t.scheduler?.activo ? 'bg-yellow-50 text-yellow-700' :
@@ -233,16 +228,20 @@ export default function AutomatizacionPage() {
                     t.scheduler?.activo ? 'bg-yellow-400' :
                     'bg-gray-400'
                   }`} />
-                  {jobActivo
-                    ? `Scheduler corriendo — cada ${t.scheduler?.intervalo_horas}h`
-                    : t.scheduler?.activo
-                    ? 'Scheduler activo (reiniciando...)'
+                  {t.scheduler?.activo
+                    ? `Scheduler activo — cada ${t.scheduler?.intervalo_horas}h`
                     : 'Scheduler inactivo'}
                 </div>
 
                 {t.scheduler?.activo && t.scheduler.hora_inicio && (
                   <p className="text-xs text-gray-400 mt-1 pl-1">
                     🕐 {utcALocal(t.scheduler.hora_inicio.slice(0, 5))} – {utcALocal(t.scheduler.hora_fin?.slice(0, 5) ?? '01:00')} (hora Cuba)
+                  </p>
+                )}
+
+                {t.session?.ultimo_ping && (
+                  <p className="text-xs text-gray-400 mt-1 pl-1">
+                    Último ping: {new Date(t.session.ultimo_ping).toLocaleString('es-CU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </p>
                 )}
 
