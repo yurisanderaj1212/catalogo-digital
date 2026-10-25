@@ -218,6 +218,8 @@ export default function PreciosPage() {
       mostrarMensaje('Error al eliminar la tasa');
     }
   };
+
+  const fetchProductos = async () => {
     const { data } = await supabase.from('productos').select('*').eq('activo', true).order('nombre');
     setProductos(data || []);
   };
