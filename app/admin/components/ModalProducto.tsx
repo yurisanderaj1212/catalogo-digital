@@ -25,6 +25,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
     tipo_venta: 'unidad_sola' as 'unidad_caja' | 'unidad_sola' | 'carnico' | 'paquete',
     unidades_por_caja: '' as string,
     unidad_peso: '' as 'kg' | 'lb' | 'ambos' | '',
+    precio_cup: '' as string,
+    precio_cup_override: '' as string,
   });
   const [imagenes, setImagenes] = useState<string[]>([]);
   const [nuevaImagen, setNuevaImagen] = useState('');
@@ -50,6 +52,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
         tipo_venta: producto.tipo_venta || 'unidad_sola',
         unidades_por_caja: producto.unidades_por_caja?.toString() || '',
         unidad_peso: producto.unidad_peso || '',
+        precio_cup: producto.precio_cup?.toString() || '',
+        precio_cup_override: producto.precio_cup_override?.toString() || '',
       });
       fetchImagenes(producto.id);
       fetchTiendasProducto(producto.id);
@@ -164,6 +168,8 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
         categoria_id: formData.categoria_id !== '' ? formData.categoria_id : null,
         unidades_por_caja: formData.unidades_por_caja !== '' ? parseInt(formData.unidades_por_caja) : null,
         unidad_peso: formData.unidad_peso !== '' ? formData.unidad_peso : null,
+        precio_cup: formData.precio_cup !== '' ? parseFloat(formData.precio_cup) : null,
+        precio_cup_override: formData.precio_cup_override !== '' ? parseFloat(formData.precio_cup_override) : null,
       };
 
       let productoId = producto?.id;
@@ -391,6 +397,51 @@ export default function ModalProducto({ producto, onClose, onSuccess }: ModalPro
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Precio CUP — solo para productos en USD */}
+          {formData.moneda === 'USD' && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+              <p className="text-xs font-semibold text-blue-800">Precio en CUP</p>
+
+              {/* Precio CUP calculado (read-only, informativo) */}
+              {formData.precio && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-28 shrink-0">Calculado por tasa:</span>
+                  <span className="text-xs text-blue-700 font-medium">
+                    {formData.precio_cup
+                      ? `${parseFloat(formData.precio_cup).toLocaleString('es-CU')} CUP`
+                      : 'Sin precio CUP — configura la tasa del dólar'}
+                  </span>
+                </div>
+              )}
+
+              {/* Override manual */}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">
+                  Precio CUP fijo (override) — opcional
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={formData.precio_cup_override}
+                  onChange={(e) => setFormData({ ...formData, precio_cup_override: e.target.value })}
+                  placeholder="Déjalo vacío para usar el precio calculado por la tasa"
+                  className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                {formData.precio_cup_override && (
+                  <p className="text-xs text-orange-600 mt-1">
+                    Override activo — este precio CUP se usará en las publicaciones, ignorando la tasa global.
+                  </p>
+                )}
+                {!formData.precio_cup_override && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Si no hay override, se usa el precio calculado automáticamente con la tasa del dólar.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

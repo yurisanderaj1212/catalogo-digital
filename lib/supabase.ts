@@ -57,6 +57,8 @@ export interface Producto {
   precio_caja: number | null;
   unidad_peso: 'kg' | 'lb' | 'ambos' | null;
   precio_por_libra: number | null;
+  precio_cup: number | null;
+  precio_cup_override: number | null;
 }
 
 export interface WaSession {

@@ -2,8 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, Producto, PriceChangeLog, Tienda } from '@/lib/supabase';
-import { Search, CheckCircle, XCircle, AlertCircle, ChevronRight, Loader, Trash2, RefreshCw, PackageX } from 'lucide-react';
+import { Search, CheckCircle, XCircle, AlertCircle, ChevronRight, Loader, Trash2, RefreshCw, PackageX, DollarSign } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers as Record<string, string> ?? {}),
+    },
+  });
+  return res;
+}
 const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
 const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
 
@@ -129,11 +143,64 @@ export default function PreciosPage() {
   // tiendasPorProducto: map productoId → lista de tiendas donde está disponible
   const [tiendasPorProducto, setTiendasPorProducto] = useState<Record<string, Tienda[]>>({});
 
+  // ── Tasa del dólar ──────────────────────────────────────────
+  const [tasa, setTasa] = useState<number | null>(null);
+  const [tasaInput, setTasaInput] = useState('');
+  const [guardandoTasa, setGuardandoTasa] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
+  const [productosActualizados, setProductosActualizados] = useState<number | null>(null);
+
   useEffect(() => {
     fetchProductos();
     fetchPendientes();
+    fetchTasa();
     supabase.from('tiendas').select('*').eq('activa', true).order('nombre').then(({ data }) => setTiendas(data || []));
   }, []);
+
+  const fetchTasa = async () => {
+    try {
+      const res = await apiFetch('/config/tasa-cambio');
+      if (res.ok) {
+        const data = await res.json();
+        setTasa(data.tasa);
+        setTasaInput(data.tasa != null ? String(data.tasa) : '');
+      }
+    } catch {}
+  };
+
+  const guardarTasaYRecalcular = async () => {
+    const tasaNum = parseFloat(tasaInput);
+    if (isNaN(tasaNum) || tasaNum <= 0) {
+      mostrarMensaje('La tasa debe ser un número mayor a cero');
+      return;
+    }
+    setGuardandoTasa(true);
+    try {
+      const resTasa = await apiFetch('/config/tasa-cambio', {
+        method: 'PUT',
+        body: JSON.stringify({ tasa: tasaNum }),
+      });
+      if (!resTasa.ok) {
+        const err = await resTasa.json();
+        mostrarMensaje(err.error ?? 'Error al guardar la tasa');
+        return;
+      }
+      setTasa(tasaNum);
+      setRecalculando(true);
+      const resRecalc = await apiFetch('/config/recalcular-cup', { method: 'POST' });
+      if (resRecalc.ok) {
+        const data = await resRecalc.json();
+        setProductosActualizados(data.actualizados);
+        mostrarMensaje(`Tasa guardada. ${data.actualizados} productos actualizados con precio CUP.`);
+        await fetchProductos();
+      }
+    } catch {
+      mostrarMensaje('Error al guardar la tasa');
+    } finally {
+      setGuardandoTasa(false);
+      setRecalculando(false);
+    }
+  };
 
   const fetchProductos = async () => {
     const { data } = await supabase.from('productos').select('*').eq('activo', true).order('nombre');
@@ -279,6 +346,56 @@ export default function PreciosPage() {
   return (
     <div className="space-y-6">
       {mensaje && <div className="fixed top-20 right-4 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg">{mensaje}</div>}
+
+      {/* ── Tasa del dólar ──────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <DollarSign className="w-4 h-4 text-green-600" />
+          <h2 className="text-sm font-semibold text-gray-700">Tasa del dólar</h2>
+          {tasa != null && (
+            <span className="ml-auto text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+              Actual: 1 USD = <strong>{tasa.toLocaleString('es-CU')}</strong> CUP
+            </span>
+          )}
+        </div>
+        {tasa == null && (
+          <div className="flex items-center gap-2 mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            No hay tasa configurada — los precios CUP no se calcularán automáticamente.
+          </div>
+        )}
+        <div className="flex gap-2">
+          <div className="flex items-center gap-2 flex-1 border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-green-500">
+            <span className="text-xs text-gray-500 shrink-0">1 USD =</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={tasaInput}
+              onChange={(e) => setTasaInput(e.target.value)}
+              placeholder="820"
+              className="flex-1 text-sm outline-none bg-transparent"
+            />
+            <span className="text-xs text-gray-500 shrink-0">CUP</span>
+          </div>
+          <button
+            onClick={guardarTasaYRecalcular}
+            disabled={guardandoTasa || recalculando || !tasaInput.trim()}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 shrink-0"
+          >
+            {(guardandoTasa || recalculando) ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {recalculando ? 'Recalculando...' : guardandoTasa ? 'Guardando...' : 'Guardar y recalcular'}
+          </button>
+        </div>
+        {productosActualizados != null && (
+          <p className="mt-2 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
+            ✓ {productosActualizados} producto{productosActualizados !== 1 ? 's' : ''} actualizados con el nuevo precio CUP
+          </p>
+        )}
+        <p className="mt-2 text-xs text-gray-400">
+          Al guardar, se recalcula automáticamente el precio CUP de todos los productos en USD sin precio CUP fijo.
+        </p>
+      </div>
 
       {/* Cambios pendientes */}
       {pendientes.length > 0 && (
