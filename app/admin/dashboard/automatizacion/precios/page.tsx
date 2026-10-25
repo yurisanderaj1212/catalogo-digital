@@ -18,6 +18,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   });
   return res;
 }
+
 const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
 const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
 
@@ -150,6 +151,18 @@ export default function PreciosPage() {
   const [recalculando, setRecalculando] = useState(false);
   const [productosActualizados, setProductosActualizados] = useState<number | null>(null);
 
+  // ── Modal de confirmación ───────────────────────────────────
+  const [modalConfirm, setModalConfirm] = useState<{
+    titulo: string;
+    mensaje: string;
+    variante: 'rojo' | 'naranja';
+    onConfirm: () => void;
+  } | null>(null);
+
+  const confirmar = (titulo: string, mensaje: string, variante: 'rojo' | 'naranja', onConfirm: () => void) => {
+    setModalConfirm({ titulo, mensaje, variante, onConfirm });
+  };
+
   useEffect(() => {
     fetchProductos();
     fetchPendientes();
@@ -203,20 +216,26 @@ export default function PreciosPage() {
   };
 
   const limpiarTasa = async () => {
-    if (!confirm('¿Eliminar la tasa del dólar? Se borrará el precio CUP de todos los productos USD y el bot publicará solo en USD.')) return;
-    try {
-      const res = await apiFetch('/config/tasa-cambio', { method: 'DELETE' });
-      if (res.ok) {
-        const data = await res.json();
-        setTasa(null);
-        setTasaInput('');
-        setProductosActualizados(null);
-        mostrarMensaje(`Tasa eliminada. ${data.eliminados} productos sin precio CUP.`);
-        await fetchProductos();
+    confirmar(
+      'Eliminar tasa del dólar',
+      'Se borrará el precio CUP de todos los productos USD. El bot volverá a publicar solo en USD.',
+      'rojo',
+      async () => {
+        try {
+          const res = await apiFetch('/config/tasa-cambio', { method: 'DELETE' });
+          if (res.ok) {
+            const data = await res.json();
+            setTasa(null);
+            setTasaInput('');
+            setProductosActualizados(null);
+            mostrarMensaje(`Tasa eliminada. ${data.eliminados} productos sin precio CUP.`);
+            await fetchProductos();
+          }
+        } catch {
+          mostrarMensaje('Error al eliminar la tasa');
+        }
       }
-    } catch {
-      mostrarMensaje('Error al eliminar la tasa');
-    }
+    );
   };
 
   const fetchProductos = async () => {
@@ -277,18 +296,26 @@ export default function PreciosPage() {
   };
 
   const borrarYRepublicar = async (tiendaId: string, republicar: boolean) => {
-    setBorrandoTienda(tiendaId);
-    const res = await llamarBot(`/api/borrar-y-republicar/${tiendaId}`, { republicar });
-    if (res?.ok) {
-      const tiempoMin = res.total ? Math.ceil((res.total * 1.5) / 60) : null;
-      const tiempoTxt = tiempoMin ? ` (~${tiempoMin} min)` : '';
-      mostrarMensaje(`${res.mensaje}${tiempoTxt}`);
-      // Mantener spinner durante el proceso — se limpia tras 15 min máx
-      setTimeout(() => setBorrandoTienda(null), 15 * 60 * 1000);
-    } else {
-      mostrarMensaje(res?.mensaje ?? res?.error ?? 'Error al borrar mensajes');
-      setBorrandoTienda(null);
-    }
+    const tienda = tiendas.find(t => t.id === tiendaId);
+    confirmar(
+      republicar ? 'Borrar y republicar' : 'Borrar publicaciones',
+      `¿Borrar los mensajes recientes de ${tienda?.nombre ?? 'esta tienda'}${republicar ? ' y volver a publicar todo el catálogo?' : '?'} Esta acción no se puede deshacer.`,
+      republicar ? 'naranja' : 'rojo',
+      async () => {
+        setBorrandoTienda(tiendaId);
+        const res = await llamarBot(`/api/borrar-y-republicar/${tiendaId}`, { republicar });
+        if (res?.ok) {
+          const tiempoMin = res.total ? Math.ceil((res.total * 1.5) / 60) : null;
+          const tiempoTxt = tiempoMin ? ` (~${tiempoMin} min)` : '';
+          mostrarMensaje(`${res.mensaje}${tiempoTxt}`);
+          // Mantener spinner durante el proceso — se limpia tras 15 min máx
+          setTimeout(() => setBorrandoTienda(null), 15 * 60 * 1000);
+        } else {
+          mostrarMensaje(res?.mensaje ?? res?.error ?? 'Error al borrar mensajes');
+          setBorrandoTienda(null);
+        }
+      }
+    );
   };
 
   const buscarProductosAgotados = async () => {
@@ -363,6 +390,34 @@ export default function PreciosPage() {
   return (
     <div className="space-y-6">
       {mensaje && <div className="fixed top-20 right-4 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg">{mensaje}</div>}
+
+      {/* ── Modal de confirmación ─────────────────────────────── */}
+      {modalConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-2">{modalConfirm.titulo}</h3>
+            <p className="text-sm text-gray-600 mb-5">{modalConfirm.mensaje}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setModalConfirm(null)}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setModalConfirm(null); modalConfirm.onConfirm(); }}
+                className={`px-4 py-2 text-sm text-white rounded-lg font-medium ${
+                  modalConfirm.variante === 'rojo'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }`}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Tasa del dólar ──────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -520,39 +575,6 @@ export default function PreciosPage() {
         </div>
       )}
 
-      {/* Borrar publicaciones y republicar */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-2">
-          <Trash2 className="w-4 h-4 text-red-600" />
-          <h2 className="text-sm font-semibold text-gray-700">Borrar publicaciones recientes</h2>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">Borra mensajes publicados en las ultimas 55h. Util cuando cambiaron precios y quieres limpiar los mensajes con precio viejo.</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {tiendas.map((t) => (
-            <div key={t.id} className="border border-gray-200 rounded-lg p-3">
-              <p className="text-sm font-medium text-gray-900 mb-2">{t.nombre}</p>
-              <div className="flex gap-2">
-                <button onClick={() => borrarYRepublicar(t.id, false)} disabled={borrandoTienda === t.id}
-                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 text-red-700 text-xs rounded-lg hover:bg-red-100 disabled:opacity-50 border border-red-200">
-                  {borrandoTienda === t.id ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                  {borrandoTienda === t.id ? 'En progreso...' : 'Solo borrar'}
-                </button>
-                <button onClick={() => borrarYRepublicar(t.id, true)} disabled={borrandoTienda === t.id}
-                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-50 text-blue-700 text-xs rounded-lg hover:bg-blue-100 disabled:opacity-50 border border-blue-200">
-                  {borrandoTienda === t.id ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  {borrandoTienda === t.id ? 'En progreso...' : 'Borrar + republicar'}
-                </button>
-              </div>
-              {borrandoTienda === t.id && (
-                <p className="text-xs text-amber-600 mt-2 text-center bg-amber-50 rounded p-1">
-                  ⏳ Borrando en background — puede tardar varios minutos. No cierres esta página.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Notificar agotados */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-2">
@@ -615,6 +637,39 @@ export default function PreciosPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Borrar publicaciones y republicar */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <Trash2 className="w-4 h-4 text-red-600" />
+          <h2 className="text-sm font-semibold text-gray-700">Borrar publicaciones recientes</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">Borra mensajes publicados en las ultimas 55h. Util cuando cambiaron precios y quieres limpiar los mensajes con precio viejo.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {tiendas.map((t) => (
+            <div key={t.id} className="border border-gray-200 rounded-lg p-3">
+              <p className="text-sm font-medium text-gray-900 mb-2">{t.nombre}</p>
+              <div className="flex gap-2">
+                <button onClick={() => borrarYRepublicar(t.id, false)} disabled={borrandoTienda === t.id}
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 text-red-700 text-xs rounded-lg hover:bg-red-100 disabled:opacity-50 border border-red-200">
+                  {borrandoTienda === t.id ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  {borrandoTienda === t.id ? 'En progreso...' : 'Solo borrar'}
+                </button>
+                <button onClick={() => borrarYRepublicar(t.id, true)} disabled={borrandoTienda === t.id}
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-50 text-blue-700 text-xs rounded-lg hover:bg-blue-100 disabled:opacity-50 border border-blue-200">
+                  {borrandoTienda === t.id ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  {borrandoTienda === t.id ? 'En progreso...' : 'Borrar + republicar'}
+                </button>
+              </div>
+              {borrandoTienda === t.id && (
+                <p className="text-xs text-amber-600 mt-2 text-center bg-amber-50 rounded p-1">
+                  ⏳ Borrando en background — puede tardar varios minutos. No cierres esta página.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
     </div>
