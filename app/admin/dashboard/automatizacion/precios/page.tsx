@@ -202,7 +202,22 @@ export default function PreciosPage() {
     }
   };
 
-  const fetchProductos = async () => {
+  const limpiarTasa = async () => {
+    if (!confirm('¿Eliminar la tasa del dólar? Se borrará el precio CUP de todos los productos USD y el bot publicará solo en USD.')) return;
+    try {
+      const res = await apiFetch('/config/tasa-cambio', { method: 'DELETE' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasa(null);
+        setTasaInput('');
+        setProductosActualizados(null);
+        mostrarMensaje(`Tasa eliminada. ${data.eliminados} productos sin precio CUP.`);
+        await fetchProductos();
+      }
+    } catch {
+      mostrarMensaje('Error al eliminar la tasa');
+    }
+  };
     const { data } = await supabase.from('productos').select('*').eq('activo', true).order('nombre');
     setProductos(data || []);
   };
@@ -386,6 +401,16 @@ export default function PreciosPage() {
             {(guardandoTasa || recalculando) ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             {recalculando ? 'Recalculando...' : guardandoTasa ? 'Guardando...' : 'Guardar y recalcular'}
           </button>
+          {tasa != null && (
+            <button
+              onClick={limpiarTasa}
+              className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 text-sm rounded-lg hover:bg-red-100 border border-red-200 shrink-0"
+              title="Eliminar tasa y borrar precios CUP de todos los productos USD"
+            >
+              <XCircle className="w-4 h-4" />
+              Limpiar
+            </button>
+          )}
         </div>
         {productosActualizados != null && (
           <p className="mt-2 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
