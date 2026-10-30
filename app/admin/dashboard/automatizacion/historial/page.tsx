@@ -121,12 +121,12 @@ export default function HistorialPage() {
   // Cuenta solo los fallidos reales para el badge del tab
   const fetchContadorFallos = async () => {
     try {
-      const hace15h = new Date(Date.now() - 15 * 60 * 60 * 1000).toISOString();
+      const hace20h = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
       const { data: fallidos } = await supabase
         .from('mensajes_log')
         .select('id, producto_id, grupo_jid, created_at')
         .eq('estado', 'fallido')
-        .gte('created_at', hace15h)
+        .gte('created_at', hace20h)
         .not('producto_id', 'is', null);
 
       if (!fallidos?.length) { setContadorFallos(0); return; }
@@ -136,7 +136,7 @@ export default function HistorialPage() {
         .from('mensajes_log')
         .select('producto_id, grupo_jid')
         .eq('estado', 'enviado')
-        .gte('created_at', hace15h)
+        .gte('created_at', hace20h)
         .not('producto_id', 'is', null);
 
       const enviadosSet = new Set((enviados || []).map((e: any) => `${e.producto_id}:${e.grupo_jid}`));
@@ -153,23 +153,23 @@ export default function HistorialPage() {
     setSeleccionadosFallos(new Set());
     setSeleccionadosAdvertencia(new Set());
     try {
-      const hace15h = new Date(Date.now() - 15 * 60 * 60 * 1000).toISOString();
+      const hace20h = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
 
       // ── Grupo 1: Fallidos reales ─────────────────────────
       const { data: fallidos } = await supabase
         .from('mensajes_log')
         .select('id, producto_id, grupo_jid, tienda_id, error_msg, created_at, productos(nombre), tiendas(nombre)')
         .eq('estado', 'fallido')
-        .gte('created_at', hace15h)
+        .gte('created_at', hace20h)
         .not('producto_id', 'is', null)
         .order('created_at', { ascending: false });
 
-      // Traer todos los enviados de las últimas 15h para cruzar
+      // Traer todos los enviados de las últimas 20h para cruzar
       const { data: enviados } = await supabase
         .from('mensajes_log')
         .select('producto_id, grupo_jid, created_at')
         .eq('estado', 'enviado')
-        .gte('created_at', hace15h)
+        .gte('created_at', hace20h)
         .not('producto_id', 'is', null);
 
       // Set de producto+grupo que SÍ se enviaron exitosamente
@@ -219,7 +219,7 @@ export default function HistorialPage() {
         .select('id, producto_id, grupo_jid, tienda_id, error_msg, enviado_at, productos(nombre), tiendas(nombre)')
         .eq('estado', 'enviado')
         .not('error_msg', 'is', null)
-        .gte('created_at', hace15h)
+        .gte('created_at', hace20h)
         .not('producto_id', 'is', null)
         .order('enviado_at', { ascending: false });
 
