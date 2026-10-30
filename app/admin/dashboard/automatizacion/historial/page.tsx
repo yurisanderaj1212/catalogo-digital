@@ -532,7 +532,13 @@ export default function HistorialPage() {
     return <Clock className="w-4 h-4 text-yellow-500" />;
   };
 
-  const formatFecha = (f: string) => new Date(f).toLocaleString('es-CU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const formatFecha = (f: string) => new Date(f).toLocaleString('es-CU', {
+    timeZone: 'America/Havana',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   return (
     <div className="space-y-4">
