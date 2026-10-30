@@ -23,13 +23,16 @@ interface FalloReal {
   key: string;
 }
 
-interface EnviadoConAdvertencia {
-  id: string;
+// Grupo 2 agrupado por producto+tienda (igual que fallos reales)
+interface AdvertenciaAgrupada {
+  producto_id: string;
   producto_nombre: string;
+  tienda_id: string;
   tienda_nombre: string;
-  grupo_jid: string;
-  error_msg: string;
-  enviado_at: string;
+  grupos_con_advertencia: string[];
+  error_msg: string; // el más representativo del grupo
+  ultima_fecha: string;
+  key: string;
 }
 
 // Clasifica el error_msg en categorías legibles
@@ -84,10 +87,12 @@ export default function HistorialPage() {
 
   // ── Estado de fallos del ciclo ──
   const [fallosReales, setFallosReales] = useState<FalloReal[]>([]);
-  const [enviadosConAdvertencia, setEnviadosConAdvertencia] = useState<EnviadoConAdvertencia[]>([]);
+  const [advertenciasAgrupadas, setAdvertenciasAgrupadas] = useState<AdvertenciaAgrupada[]>([]);
   const [loadingFallos, setLoadingFallos] = useState(false);
   const [seleccionadosFallos, setSeleccionadosFallos] = useState<Set<string>>(new Set());
   const [republicandoFallos, setRepublicandoFallos] = useState(false);
+  const [seleccionadosAdvertencia, setSeleccionadosAdvertencia] = useState<Set<string>>(new Set());
+  const [republicandoAdvertencia, setRepublicandoAdvertencia] = useState(false);
   const [filtroTiendaFallos, setFiltroTiendaFallos] = useState('');
   const [contadorFallos, setContadorFallos] = useState(0);
 
@@ -146,6 +151,7 @@ export default function HistorialPage() {
   const fetchFallos = async () => {
     setLoadingFallos(true);
     setSeleccionadosFallos(new Set());
+    setSeleccionadosAdvertencia(new Set());
     try {
       const hace15h = new Date(Date.now() - 15 * 60 * 60 * 1000).toISOString();
 
@@ -179,7 +185,7 @@ export default function HistorialPage() {
         ? fallidosRealesBrutos.filter((f: any) => f.tienda_id === filtroTiendaFallos)
         : fallidosRealesBrutos;
 
-      // Agrupar por producto+tienda para mostrar "N grupos fallaron"
+      // Agrupar por producto+tienda
       const mapaFallos = new Map<string, FalloReal>();
       for (const f of fallidosFiltrados as any[]) {
         const clave = `${f.producto_id}:${f.tienda_id}`;
@@ -207,7 +213,7 @@ export default function HistorialPage() {
       // Auto-seleccionar todos al cargar
       setSeleccionadosFallos(new Set(listaFallos.map(f => f.key)));
 
-      // ── Grupo 2: Enviados con advertencia ─────────────────
+      // ── Grupo 2: Enviados con advertencia — agrupados por producto+tienda ──
       const { data: conAdvertencia } = await supabase
         .from('mensajes_log')
         .select('id, producto_id, grupo_jid, tienda_id, error_msg, enviado_at, productos(nombre), tiendas(nombre)')
@@ -221,16 +227,28 @@ export default function HistorialPage() {
         ? (conAdvertencia || []).filter((e: any) => e.tienda_id === filtroTiendaFallos)
         : (conAdvertencia || []);
 
-      setEnviadosConAdvertencia(
-        (advertenciaFiltrada as any[]).map(e => ({
-          id: e.id,
-          producto_nombre: e.productos?.nombre ?? '—',
-          tienda_nombre: e.tiendas?.nombre ?? '—',
-          grupo_jid: e.grupo_jid,
-          error_msg: e.error_msg,
-          enviado_at: e.enviado_at ?? e.created_at,
-        }))
+      // Agrupar por producto+tienda igual que los fallidos
+      const mapaAdv = new Map<string, AdvertenciaAgrupada>();
+      for (const e of advertenciaFiltrada as any[]) {
+        const clave = `adv:${e.producto_id}:${e.tienda_id}`;
+        if (!mapaAdv.has(clave)) {
+          mapaAdv.set(clave, {
+            producto_id: e.producto_id,
+            producto_nombre: e.productos?.nombre ?? '—',
+            tienda_id: e.tienda_id,
+            tienda_nombre: e.tiendas?.nombre ?? '—',
+            grupos_con_advertencia: [],
+            error_msg: e.error_msg ?? '',
+            ultima_fecha: e.enviado_at ?? '',
+            key: clave,
+          });
+        }
+        mapaAdv.get(clave)!.grupos_con_advertencia.push(e.grupo_jid);
+      }
+      const listaAdv = Array.from(mapaAdv.values()).sort((a, b) =>
+        a.tienda_nombre.localeCompare(b.tienda_nombre) || a.producto_nombre.localeCompare(b.producto_nombre)
       );
+      setAdvertenciasAgrupadas(listaAdv);
     } catch (err) {
       console.error('Error cargando fallos:', err);
     } finally {
@@ -254,19 +272,33 @@ export default function HistorialPage() {
     }
   };
 
-  const ejecutarRepublicarFallos = async () => {
-    if (seleccionadosFallos.size === 0) return;
+  const toggleAdvertencia = (key: string) => {
+    setSeleccionadosAdvertencia(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
-    // Agrupar por tienda → { tiendaId: Set<productoId> }
-    const porTienda = new Map<string, Set<string>>();
-    for (const key of seleccionadosFallos) {
-      const fallo = fallosReales.find(f => f.key === key);
-      if (!fallo) continue;
-      if (!porTienda.has(fallo.tienda_id)) porTienda.set(fallo.tienda_id, new Set());
-      porTienda.get(fallo.tienda_id)!.add(fallo.producto_id);
+  const toggleTodasAdvertencias = () => {
+    if (seleccionadosAdvertencia.size === advertenciasAgrupadas.length) {
+      setSeleccionadosAdvertencia(new Set());
+    } else {
+      setSeleccionadosAdvertencia(new Set(advertenciasAgrupadas.map(a => a.key)));
     }
+  };
 
-    setRepublicandoFallos(true);
+  // Helper reutilizable: dada una lista de {tienda_id, producto_id}, llama al bot
+  const republicarLista = async (
+    items: { tienda_id: string; producto_id: string }[],
+    setRepublicando: (v: boolean) => void,
+  ) => {
+    const porTienda = new Map<string, Set<string>>();
+    for (const item of items) {
+      if (!porTienda.has(item.tienda_id)) porTienda.set(item.tienda_id, new Set());
+      porTienda.get(item.tienda_id)!.add(item.producto_id);
+    }
+    setRepublicando(true);
     try {
       let totalProductos = 0;
       for (const [tiendaId, productoIds] of porTienda) {
@@ -280,15 +312,32 @@ export default function HistorialPage() {
         totalProductos += data.productos ?? 0;
       }
       setMensajeOp(`✅ ${totalProductos} producto(s) encolados para republicar`);
-      setSeleccionadosFallos(new Set());
-      setContadorFallos(0);
       setTimeout(() => setMensajeOp(''), 5000);
     } catch (err: any) {
       setMensajeOp(`Error: ${err.message}`);
       setTimeout(() => setMensajeOp(''), 4000);
     } finally {
-      setRepublicandoFallos(false);
+      setRepublicando(false);
     }
+  };
+
+  const ejecutarRepublicarFallos = async () => {
+    if (seleccionadosFallos.size === 0) return;
+    const items = fallosReales
+      .filter(f => seleccionadosFallos.has(f.key))
+      .map(f => ({ tienda_id: f.tienda_id, producto_id: f.producto_id }));
+    await republicarLista(items, setRepublicandoFallos);
+    setSeleccionadosFallos(new Set());
+    setContadorFallos(prev => Math.max(0, prev - items.length));
+  };
+
+  const ejecutarRepublicarAdvertencias = async () => {
+    if (seleccionadosAdvertencia.size === 0) return;
+    const items = advertenciasAgrupadas
+      .filter(a => seleccionadosAdvertencia.has(a.key))
+      .map(a => ({ tienda_id: a.tienda_id, producto_id: a.producto_id }));
+    await republicarLista(items, setRepublicandoAdvertencia);
+    setSeleccionadosAdvertencia(new Set());
   };
 
   const fetchData = async () => {
@@ -658,31 +707,74 @@ export default function HistorialPage() {
               </div>
 
               {/* ── Grupo 2: Enviados con advertencia ── */}
-              {enviadosConAdvertencia.length > 0 && (
+              {advertenciasAgrupadas.length > 0 && (
                 <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-                  <div className="flex items-center gap-2 px-5 py-3 bg-amber-50 border-b border-amber-200">
-                    <AlertCircle className="w-4 h-4 text-amber-500" />
-                    <span className="text-sm font-semibold text-amber-800">
-                      Enviados con advertencia — {enviadosConAdvertencia.length} registro{enviadosConAdvertencia.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="ml-auto text-xs text-amber-600">Solo informativo — se enviaron correctamente</span>
+                  <div className="flex items-center justify-between px-5 py-3 bg-amber-50 border-b border-amber-200">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm font-semibold text-amber-800">
+                        Enviados con advertencia — {advertenciasAgrupadas.length} producto{advertenciasAgrupadas.length !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs text-amber-600 hidden sm:inline">· Se enviaron pero con algún error registrado</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs text-amber-700 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={seleccionadosAdvertencia.size === advertenciasAgrupadas.length && advertenciasAgrupadas.length > 0}
+                          onChange={toggleTodasAdvertencias}
+                          className="w-3.5 h-3.5 text-amber-600 rounded"
+                        />
+                        Seleccionar todos
+                      </label>
+                      {seleccionadosAdvertencia.size > 0 && (
+                        <button
+                          onClick={ejecutarRepublicarAdvertencias}
+                          disabled={republicandoAdvertencia}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${republicandoAdvertencia ? 'animate-spin' : ''}`} />
+                          {republicandoAdvertencia ? 'Encolando...' : `Republicar (${seleccionadosAdvertencia.size})`}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="divide-y divide-amber-50">
-                    {enviadosConAdvertencia.map((e) => (
-                      <div key={e.id} className="flex items-start gap-3 px-5 py-3">
+                    {advertenciasAgrupadas.map((a) => (
+                      <div
+                        key={a.key}
+                        onClick={() => toggleAdvertencia(a.key)}
+                        className={`flex items-start gap-3 px-5 py-3.5 cursor-pointer transition-colors ${seleccionadosAdvertencia.has(a.key) ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      >
+                        {/* Checkbox */}
+                        <div className="pt-0.5" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={seleccionadosAdvertencia.has(a.key)}
+                            onChange={() => toggleAdvertencia(a.key)}
+                            className="w-4 h-4 text-amber-600 rounded"
+                          />
+                        </div>
+                        {/* Icono enviado */}
                         <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                        {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium text-gray-700">{e.producto_nombre}</span>
+                            <span className="text-sm font-semibold text-gray-900">{a.producto_nombre}</span>
                             <span className="text-xs text-gray-400">—</span>
-                            <span className="text-xs text-gray-500">{e.tienda_nombre}</span>
+                            <span className="text-xs text-gray-500">{a.tienda_nombre}</span>
                           </div>
-                          <p className="text-xs text-amber-600 mt-0.5 truncate max-w-[420px]" title={e.error_msg}>
-                            {e.error_msg}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-amber-600">
+                              {a.grupos_con_advertencia.length} grupo{a.grupos_con_advertencia.length !== 1 ? 's' : ''} con advertencia
+                            </span>
+                          </div>
+                          <p className="text-xs text-amber-500 mt-0.5 truncate max-w-[420px]" title={a.error_msg}>
+                            {a.error_msg}
                           </p>
                         </div>
                         <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
-                          {formatFecha(e.enviado_at)}
+                          {a.ultima_fecha ? formatFecha(a.ultima_fecha) : '—'}
                         </span>
                       </div>
                     ))}
