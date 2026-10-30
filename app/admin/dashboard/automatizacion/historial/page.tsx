@@ -2,12 +2,58 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, Tienda } from '@/lib/supabase';
-import { CheckCircle, XCircle, Clock, TrendingUp, Send, Filter, Trash2, Search, AlertTriangle, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, TrendingUp, Send, Filter, Trash2, Search, AlertTriangle, RefreshCw, AlertCircle } from 'lucide-react';
 
-type TabType = 'envios' | 'precios' | 'borrar' | 'republicar';
+type TabType = 'envios' | 'precios' | 'borrar' | 'republicar' | 'fallos';
 
 const BOT_URL = process.env.NEXT_PUBLIC_BOT_SERVICE_URL ?? '';
 const BOT_SECRET = process.env.NEXT_PUBLIC_BOT_SERVICE_SECRET ?? '';
+
+// ── Tipos para el tab de fallos ──────────────────────────────
+interface FalloReal {
+  producto_id: string;
+  producto_nombre: string;
+  tienda_id: string;
+  tienda_nombre: string;
+  grupos_fallidos: string[]; // lista de grupo_jid que fallaron
+  error_tipo: 'media' | 'conexion' | 'expirado' | 'otro';
+  error_msg: string;
+  ultima_fecha: string;
+  // clave única para el checkbox: producto_id + tienda_id
+  key: string;
+}
+
+interface EnviadoConAdvertencia {
+  id: string;
+  producto_nombre: string;
+  tienda_nombre: string;
+  grupo_jid: string;
+  error_msg: string;
+  enviado_at: string;
+}
+
+// Clasifica el error_msg en categorías legibles
+function clasificarError(msg: string): FalloReal['error_tipo'] {
+  const m = (msg ?? '').toLowerCase();
+  if (m.includes('media') || m.includes('upload') || m.includes('imagen') || m.includes('image')) return 'media';
+  if (m.includes('connection') || m.includes('stream') || m.includes('socket') || m.includes('econnreset') || m.includes('timed out') || m.includes('timeout')) return 'conexion';
+  if (m.includes('ciclo expirado') || m.includes('ciclo anterior')) return 'expirado';
+  return 'otro';
+}
+
+const errorTipoLabel: Record<FalloReal['error_tipo'], string> = {
+  media: '🖼️ Error de imagen',
+  conexion: '🔌 Error de conexión',
+  expirado: '⏱️ Ciclo expirado',
+  otro: '⚠️ Error desconocido',
+};
+
+const errorTipoCls: Record<FalloReal['error_tipo'], string> = {
+  media: 'bg-purple-50 text-purple-700 border-purple-200',
+  conexion: 'bg-orange-50 text-orange-700 border-orange-200',
+  expirado: 'bg-gray-50 text-gray-600 border-gray-200',
+  otro: 'bg-red-50 text-red-700 border-red-200',
+};
 
 export default function HistorialPage() {
   const [tab, setTab] = useState<TabType>('envios');
@@ -36,12 +82,23 @@ export default function HistorialPage() {
   const [seleccionadosRep, setSeleccionadosRep] = useState<Set<string>>(new Set());
   const [republicando, setRepublicando] = useState(false);
 
+  // ── Estado de fallos del ciclo ──
+  const [fallosReales, setFallosReales] = useState<FalloReal[]>([]);
+  const [enviadosConAdvertencia, setEnviadosConAdvertencia] = useState<EnviadoConAdvertencia[]>([]);
+  const [loadingFallos, setLoadingFallos] = useState(false);
+  const [seleccionadosFallos, setSeleccionadosFallos] = useState<Set<string>>(new Set());
+  const [republicandoFallos, setRepublicandoFallos] = useState(false);
+  const [filtroTiendaFallos, setFiltroTiendaFallos] = useState('');
+  const [contadorFallos, setContadorFallos] = useState(0);
+
   useEffect(() => {
     supabase.from('tiendas').select('*').eq('activa', true).order('nombre').then(({ data }) => setTiendas(data || []));
+    // Cargar conteo de fallos al montar para el badge
+    fetchContadorFallos();
   }, []);
 
   useEffect(() => {
-    if (tab !== 'borrar' && tab !== 'republicar') fetchData();
+    if (tab !== 'borrar' && tab !== 'republicar' && tab !== 'fallos') fetchData();
   }, [tab, filtroTienda, pagina]);
 
   useEffect(() => {
@@ -51,6 +108,188 @@ export default function HistorialPage() {
   useEffect(() => {
     if (tab === 'republicar') fetchRepublicables();
   }, [tab, filtroTiendaRep]);
+
+  useEffect(() => {
+    if (tab === 'fallos') fetchFallos();
+  }, [tab, filtroTiendaFallos]);
+
+  // Cuenta solo los fallidos reales para el badge del tab
+  const fetchContadorFallos = async () => {
+    try {
+      const hace15h = new Date(Date.now() - 15 * 60 * 60 * 1000).toISOString();
+      const { data: fallidos } = await supabase
+        .from('mensajes_log')
+        .select('id, producto_id, grupo_jid, created_at')
+        .eq('estado', 'fallido')
+        .gte('created_at', hace15h)
+        .not('producto_id', 'is', null);
+
+      if (!fallidos?.length) { setContadorFallos(0); return; }
+
+      // Excluir los que tienen un enviado posterior para mismo producto+grupo
+      const { data: enviados } = await supabase
+        .from('mensajes_log')
+        .select('producto_id, grupo_jid')
+        .eq('estado', 'enviado')
+        .gte('created_at', hace15h)
+        .not('producto_id', 'is', null);
+
+      const enviadosSet = new Set((enviados || []).map((e: any) => `${e.producto_id}:${e.grupo_jid}`));
+      const fallidosReales = fallidos.filter((f: any) => !enviadosSet.has(`${f.producto_id}:${f.grupo_jid}`));
+
+      // Contar productos únicos (no filas individuales)
+      const productosUnicos = new Set(fallidosReales.map((f: any) => `${f.producto_id}:${'tienda'}`));
+      setContadorFallos(productosUnicos.size);
+    } catch { setContadorFallos(0); }
+  };
+
+  const fetchFallos = async () => {
+    setLoadingFallos(true);
+    setSeleccionadosFallos(new Set());
+    try {
+      const hace15h = new Date(Date.now() - 15 * 60 * 60 * 1000).toISOString();
+
+      // ── Grupo 1: Fallidos reales ─────────────────────────
+      const { data: fallidos } = await supabase
+        .from('mensajes_log')
+        .select('id, producto_id, grupo_jid, tienda_id, error_msg, created_at, productos(nombre), tiendas(nombre)')
+        .eq('estado', 'fallido')
+        .gte('created_at', hace15h)
+        .not('producto_id', 'is', null)
+        .order('created_at', { ascending: false });
+
+      // Traer todos los enviados de las últimas 15h para cruzar
+      const { data: enviados } = await supabase
+        .from('mensajes_log')
+        .select('producto_id, grupo_jid, created_at')
+        .eq('estado', 'enviado')
+        .gte('created_at', hace15h)
+        .not('producto_id', 'is', null);
+
+      // Set de producto+grupo que SÍ se enviaron exitosamente
+      const enviadosSet = new Set((enviados || []).map((e: any) => `${e.producto_id}:${e.grupo_jid}`));
+
+      // Filtrar los fallidos que NO tienen un enviado posterior
+      const fallidosRealesBrutos = (fallidos || []).filter(
+        (f: any) => !enviadosSet.has(`${f.producto_id}:${f.grupo_jid}`)
+      );
+
+      // Filtrar por tienda si aplica
+      const fallidosFiltrados = filtroTiendaFallos
+        ? fallidosRealesBrutos.filter((f: any) => f.tienda_id === filtroTiendaFallos)
+        : fallidosRealesBrutos;
+
+      // Agrupar por producto+tienda para mostrar "N grupos fallaron"
+      const mapaFallos = new Map<string, FalloReal>();
+      for (const f of fallidosFiltrados as any[]) {
+        const clave = `${f.producto_id}:${f.tienda_id}`;
+        if (!mapaFallos.has(clave)) {
+          mapaFallos.set(clave, {
+            producto_id: f.producto_id,
+            producto_nombre: f.productos?.nombre ?? '—',
+            tienda_id: f.tienda_id,
+            tienda_nombre: f.tiendas?.nombre ?? '—',
+            grupos_fallidos: [],
+            error_tipo: clasificarError(f.error_msg),
+            error_msg: f.error_msg ?? '',
+            ultima_fecha: f.created_at,
+            key: clave,
+          });
+        }
+        mapaFallos.get(clave)!.grupos_fallidos.push(f.grupo_jid);
+      }
+      const listaFallos = Array.from(mapaFallos.values()).sort((a, b) =>
+        a.tienda_nombre.localeCompare(b.tienda_nombre) || a.producto_nombre.localeCompare(b.producto_nombre)
+      );
+      setFallosReales(listaFallos);
+      setContadorFallos(listaFallos.length);
+
+      // Auto-seleccionar todos al cargar
+      setSeleccionadosFallos(new Set(listaFallos.map(f => f.key)));
+
+      // ── Grupo 2: Enviados con advertencia ─────────────────
+      const { data: conAdvertencia } = await supabase
+        .from('mensajes_log')
+        .select('id, producto_id, grupo_jid, tienda_id, error_msg, enviado_at, productos(nombre), tiendas(nombre)')
+        .eq('estado', 'enviado')
+        .not('error_msg', 'is', null)
+        .gte('created_at', hace15h)
+        .not('producto_id', 'is', null)
+        .order('enviado_at', { ascending: false });
+
+      const advertenciaFiltrada = filtroTiendaFallos
+        ? (conAdvertencia || []).filter((e: any) => e.tienda_id === filtroTiendaFallos)
+        : (conAdvertencia || []);
+
+      setEnviadosConAdvertencia(
+        (advertenciaFiltrada as any[]).map(e => ({
+          id: e.id,
+          producto_nombre: e.productos?.nombre ?? '—',
+          tienda_nombre: e.tiendas?.nombre ?? '—',
+          grupo_jid: e.grupo_jid,
+          error_msg: e.error_msg,
+          enviado_at: e.enviado_at ?? e.created_at,
+        }))
+      );
+    } catch (err) {
+      console.error('Error cargando fallos:', err);
+    } finally {
+      setLoadingFallos(false);
+    }
+  };
+
+  const toggleFallo = (key: string) => {
+    setSeleccionadosFallos(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const toggleTodosFallos = () => {
+    if (seleccionadosFallos.size === fallosReales.length) {
+      setSeleccionadosFallos(new Set());
+    } else {
+      setSeleccionadosFallos(new Set(fallosReales.map(f => f.key)));
+    }
+  };
+
+  const ejecutarRepublicarFallos = async () => {
+    if (seleccionadosFallos.size === 0) return;
+
+    // Agrupar por tienda → { tiendaId: Set<productoId> }
+    const porTienda = new Map<string, Set<string>>();
+    for (const key of seleccionadosFallos) {
+      const fallo = fallosReales.find(f => f.key === key);
+      if (!fallo) continue;
+      if (!porTienda.has(fallo.tienda_id)) porTienda.set(fallo.tienda_id, new Set());
+      porTienda.get(fallo.tienda_id)!.add(fallo.producto_id);
+    }
+
+    setRepublicandoFallos(true);
+    try {
+      let totalProductos = 0;
+      for (const [tiendaId, productoIds] of porTienda) {
+        const res = await fetch(`${BOT_URL}/api/republicar/${tiendaId}`, {
+          method: 'POST',
+          headers: { 'x-bot-secret': BOT_SECRET, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productoIds: Array.from(productoIds) }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error en el bot');
+        totalProductos += data.productos ?? 0;
+      }
+      setMensajeOp(`✅ ${totalProductos} producto(s) encolados para republicar`);
+      setSeleccionadosFallos(new Set());
+      setContadorFallos(0);
+      setTimeout(() => setMensajeOp(''), 5000);
+    } catch (err: any) {
+      setMensajeOp(`Error: ${err.message}`);
+      setTimeout(() => setMensajeOp(''), 4000);
+    } finally {
+      setRepublicandoFallos(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -159,7 +398,6 @@ export default function HistorialPage() {
 
   const ejecutarRepublicar = async () => {
     if (seleccionadosRep.size === 0) return;
-    // Agrupar por tienda → { tiendaId: Set<productoId> }
     const porTienda = new Map<string, Set<string>>();
     for (const id of seleccionadosRep) {
       const item = republicables.find((r) => r.id === id);
@@ -211,8 +449,6 @@ export default function HistorialPage() {
 
   const ejecutarBorradoSelectivo = async () => {
     if (seleccionados.size === 0) return;
-
-    // Agrupar seleccionados por tienda
     const porTienda = new Map<string, string[]>();
     for (const id of seleccionados) {
       const msg = borrables.find((b) => b.id === id);
@@ -220,7 +456,6 @@ export default function HistorialPage() {
       if (!porTienda.has(msg.tienda_id)) porTienda.set(msg.tienda_id, []);
       porTienda.get(msg.tienda_id)!.push(id);
     }
-
     setBorrando(true);
     try {
       for (const [tiendaId, logIds] of porTienda) {
@@ -263,6 +498,18 @@ export default function HistorialPage() {
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'envios' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
           <Send className="w-3.5 h-3.5" /> Envíos WA
         </button>
+
+        {/* Tab fallos — con badge si hay fallidos */}
+        <button onClick={() => setTab('fallos')}
+          className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'fallos' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          <AlertTriangle className="w-3.5 h-3.5" /> Fallos del ciclo
+          {contadorFallos > 0 && (
+            <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${tab === 'fallos' ? 'bg-white text-red-600' : 'bg-red-500 text-white'}`}>
+              {contadorFallos}
+            </span>
+          )}
+        </button>
+
         <button onClick={() => { setTab('precios'); setPagina(0); }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'precios' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
           <TrendingUp className="w-3.5 h-3.5" /> Cambios de precio
@@ -277,10 +524,179 @@ export default function HistorialPage() {
         </button>
       </div>
 
+      {/* ── TAB: FALLOS DEL CICLO ── */}
+      {tab === 'fallos' && (
+        <div className="space-y-5">
+          {/* Cabecera informativa */}
+          <div className="flex gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
+            <div>
+              <p className="font-semibold mb-1">Fallos del último ciclo (últimas 15 horas)</p>
+              <p className="text-xs leading-relaxed text-red-700">
+                Solo muestra productos que <strong>no se publicaron</strong> en al menos un grupo — agotaron todos los reintentos y no tienen un envío exitoso posterior.
+                Los seleccionados se republicarán en todos los grupos donde fallaron.
+              </p>
+            </div>
+          </div>
+
+          {/* Filtro tienda + botón refrescar */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+            <select
+              value={filtroTiendaFallos}
+              onChange={(e) => setFiltroTiendaFallos(e.target.value)}
+              className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+            >
+              <option value="">Todas las tiendas</option>
+              {tiendas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
+            <button
+              onClick={fetchFallos}
+              disabled={loadingFallos}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingFallos ? 'animate-spin' : ''}`} />
+              Refrescar
+            </button>
+          </div>
+
+          {loadingFallos ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+            </div>
+          ) : (
+            <>
+              {/* ── Grupo 1: Fallidos reales ── */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-red-50 border-b border-red-200">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-red-500" />
+                    <span className="text-sm font-semibold text-red-800">
+                      Fallidos reales — {fallosReales.length} producto{fallosReales.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {fallosReales.length > 0 && (
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs text-red-700 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={seleccionadosFallos.size === fallosReales.length && fallosReales.length > 0}
+                          onChange={toggleTodosFallos}
+                          className="w-3.5 h-3.5 text-red-600 rounded"
+                        />
+                        Seleccionar todos
+                      </label>
+                      <button
+                        onClick={ejecutarRepublicarFallos}
+                        disabled={republicandoFallos || seleccionadosFallos.size === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${republicandoFallos ? 'animate-spin' : ''}`} />
+                        {republicandoFallos ? 'Encolando...' : `Republicar (${seleccionadosFallos.size})`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {fallosReales.length === 0 ? (
+                  <div className="flex flex-col items-center py-10 text-gray-400">
+                    <CheckCircle className="w-8 h-8 mb-2 text-green-400" />
+                    <p className="text-sm font-medium text-gray-500">Sin fallos reales en las últimas 15 horas</p>
+                    <p className="text-xs text-gray-400 mt-1">Todos los productos se publicaron correctamente</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {fallosReales.map((f) => (
+                      <div
+                        key={f.key}
+                        onClick={() => toggleFallo(f.key)}
+                        className={`flex items-start gap-3 px-5 py-3.5 cursor-pointer transition-colors ${seleccionadosFallos.has(f.key) ? 'bg-red-50' : 'hover:bg-gray-50'}`}
+                      >
+                        {/* Checkbox */}
+                        <div className="pt-0.5" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={seleccionadosFallos.has(f.key)}
+                            onChange={() => toggleFallo(f.key)}
+                            className="w-4 h-4 text-red-600 rounded"
+                          />
+                        </div>
+
+                        {/* Info principal */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-900">{f.producto_nombre}</span>
+                            <span className="text-xs text-gray-400">—</span>
+                            <span className="text-xs text-gray-500">{f.tienda_nombre}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {/* Tipo de error */}
+                            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${errorTipoCls[f.error_tipo]}`}>
+                              {errorTipoLabel[f.error_tipo]}
+                            </span>
+                            {/* Grupos fallidos */}
+                            <span className="text-xs text-gray-500">
+                              {f.grupos_fallidos.length} grupo{f.grupos_fallidos.length !== 1 ? 's' : ''} sin publicar
+                            </span>
+                          </div>
+                          {/* Mensaje de error truncado */}
+                          {f.error_msg && (
+                            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[420px]" title={f.error_msg}>
+                              {f.error_msg}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Fecha */}
+                        <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
+                          {formatFecha(f.ultima_fecha)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Grupo 2: Enviados con advertencia ── */}
+              {enviadosConAdvertencia.length > 0 && (
+                <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2 px-5 py-3 bg-amber-50 border-b border-amber-200">
+                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                    <span className="text-sm font-semibold text-amber-800">
+                      Enviados con advertencia — {enviadosConAdvertencia.length} registro{enviadosConAdvertencia.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="ml-auto text-xs text-amber-600">Solo informativo — se enviaron correctamente</span>
+                  </div>
+                  <div className="divide-y divide-amber-50">
+                    {enviadosConAdvertencia.map((e) => (
+                      <div key={e.id} className="flex items-start gap-3 px-5 py-3">
+                        <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-gray-700">{e.producto_nombre}</span>
+                            <span className="text-xs text-gray-400">—</span>
+                            <span className="text-xs text-gray-500">{e.tienda_nombre}</span>
+                          </div>
+                          <p className="text-xs text-amber-600 mt-0.5 truncate max-w-[420px]" title={e.error_msg}>
+                            {e.error_msg}
+                          </p>
+                        </div>
+                        <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
+                          {formatFecha(e.enviado_at)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── TAB: BORRADO SELECTIVO ── */}
       {tab === 'borrar' && (
         <div className="space-y-4">
-          {/* Aviso */}
           <div className="flex gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
@@ -291,50 +707,34 @@ export default function HistorialPage() {
               </p>
             </div>
           </div>
-
-          {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por producto (ej: pañal)"
-                value={busqueda}
+              <input type="text" placeholder="Buscar por producto (ej: pañal)" value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              />
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" />
             </div>
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-gray-400 shrink-0" />
-              <select
-                value={filtroTiendaBorrar}
-                onChange={(e) => setFiltroTiendaBorrar(e.target.value)}
-                className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              >
+              <select value={filtroTiendaBorrar} onChange={(e) => setFiltroTiendaBorrar(e.target.value)}
+                className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
                 <option value="">Todas las tiendas</option>
                 {tiendas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
               </select>
             </div>
           </div>
-
-          {/* Barra de acción */}
           {seleccionados.size > 0 && (
             <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-xl">
               <span className="text-sm font-medium text-red-800">
                 {seleccionados.size} mensaje{seleccionados.size > 1 ? 's' : ''} seleccionado{seleccionados.size > 1 ? 's' : ''}
               </span>
-              <button
-                onClick={ejecutarBorradoSelectivo}
-                disabled={borrando}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
+              <button onClick={ejecutarBorradoSelectivo} disabled={borrando}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
                 <Trash2 className="w-3.5 h-3.5" />
                 {borrando ? 'Enviando al bot...' : 'Borrar seleccionados'}
               </button>
             </div>
           )}
-
-          {/* Tabla de borrables */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             {loadingBorrables ? (
               <div className="flex items-center justify-center py-12">
@@ -343,21 +743,15 @@ export default function HistorialPage() {
             ) : borrablesFiltrados.length === 0 ? (
               <div className="flex flex-col items-center py-12 text-gray-400">
                 <Trash2 className="w-8 h-8 mb-2" />
-                <p className="text-sm">
-                  {busqueda ? `No hay mensajes que coincidan con "${busqueda}"` : 'No hay mensajes borrables en las últimas 55h'}
-                </p>
+                <p className="text-sm">{busqueda ? `No hay mensajes que coincidan con "${busqueda}"` : 'No hay mensajes borrables en las últimas 55h'}</p>
               </div>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-2.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={seleccionados.size === borrablesFiltrados.length && borrablesFiltrados.length > 0}
-                        onChange={toggleTodos}
-                        className="w-4 h-4 text-red-600 rounded"
-                      />
+                      <input type="checkbox" checked={seleccionados.size === borrablesFiltrados.length && borrablesFiltrados.length > 0}
+                        onChange={toggleTodos} className="w-4 h-4 text-red-600 rounded" />
                     </th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Producto</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 hidden md:table-cell">Tienda</th>
@@ -367,32 +761,21 @@ export default function HistorialPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {borrablesFiltrados.map((b) => (
-                    <tr
-                      key={b.id}
-                      onClick={() => toggleSeleccion(b.id)}
-                      className={`cursor-pointer transition-colors ${seleccionados.has(b.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}
-                    >
+                    <tr key={b.id} onClick={() => toggleSeleccion(b.id)}
+                      className={`cursor-pointer transition-colors ${seleccionados.has(b.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
                       <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={seleccionados.has(b.id)}
-                          onChange={() => toggleSeleccion(b.id)}
-                          className="w-4 h-4 text-red-600 rounded"
-                        />
+                        <input type="checkbox" checked={seleccionados.has(b.id)} onChange={() => toggleSeleccion(b.id)} className="w-4 h-4 text-red-600 rounded" />
                       </td>
                       <td className="px-4 py-2.5 font-medium text-gray-900">{b.producto_nombre}</td>
                       <td className="px-4 py-2.5 text-gray-500 hidden md:table-cell">{b.tienda_nombre}</td>
                       <td className="px-4 py-2.5 text-gray-400 text-xs hidden lg:table-cell truncate max-w-[140px]">{b.grupo_jid}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-400 hidden sm:table-cell">
-                        {b.enviado_at ? formatFecha(b.enviado_at) : '—'}
-                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-400 hidden sm:table-cell">{b.enviado_at ? formatFecha(b.enviado_at) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
           </div>
-
           {!loadingBorrables && borrablesFiltrados.length > 0 && (
             <p className="text-xs text-gray-400 text-right">
               {borrablesFiltrados.length} mensaje{borrablesFiltrados.length !== 1 ? 's' : ''} borrables encontrados
@@ -413,50 +796,34 @@ export default function HistorialPage() {
               </p>
             </div>
           </div>
-
-          {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por nombre de producto"
-                value={busquedaRep}
+              <input type="text" placeholder="Buscar por nombre de producto" value={busquedaRep}
                 onChange={(e) => setBusquedaRep(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent" />
             </div>
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-gray-400 shrink-0" />
-              <select
-                value={filtroTiendaRep}
-                onChange={(e) => setFiltroTiendaRep(e.target.value)}
-                className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              >
+              <select value={filtroTiendaRep} onChange={(e) => setFiltroTiendaRep(e.target.value)}
+                className="text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
                 <option value="">Todas las tiendas</option>
                 {tiendas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
               </select>
             </div>
           </div>
-
-          {/* Barra de acción */}
           {seleccionadosRep.size > 0 && (
             <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
               <span className="text-sm font-medium text-green-800">
                 {seleccionadosRep.size} producto{seleccionadosRep.size > 1 ? 's' : ''} seleccionado{seleccionadosRep.size > 1 ? 's' : ''}
               </span>
-              <button
-                onClick={ejecutarRepublicar}
-                disabled={republicando}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
+              <button onClick={ejecutarRepublicar} disabled={republicando}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
                 <RefreshCw className={`w-3.5 h-3.5 ${republicando ? 'animate-spin' : ''}`} />
                 {republicando ? 'Encolando...' : 'Republicar seleccionados'}
               </button>
             </div>
           )}
-
-          {/* Tabla */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             {loadingRepublicables ? (
               <div className="flex items-center justify-center py-12">
@@ -465,21 +832,15 @@ export default function HistorialPage() {
             ) : republicablesFiltrados.length === 0 ? (
               <div className="flex flex-col items-center py-12 text-gray-400">
                 <RefreshCw className="w-8 h-8 mb-2" />
-                <p className="text-sm">
-                  {busquedaRep ? `No hay productos que coincidan con "${busquedaRep}"` : 'No hay productos disponibles'}
-                </p>
+                <p className="text-sm">{busquedaRep ? `No hay productos que coincidan con "${busquedaRep}"` : 'No hay productos disponibles'}</p>
               </div>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-2.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={seleccionadosRep.size === republicablesFiltrados.length && republicablesFiltrados.length > 0}
-                        onChange={toggleTodosRep}
-                        className="w-4 h-4 text-green-600 rounded"
-                      />
+                      <input type="checkbox" checked={seleccionadosRep.size === republicablesFiltrados.length && republicablesFiltrados.length > 0}
+                        onChange={toggleTodosRep} className="w-4 h-4 text-green-600 rounded" />
                     </th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Producto</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 hidden md:table-cell">Tienda</th>
@@ -488,18 +849,10 @@ export default function HistorialPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {republicablesFiltrados.map((r) => (
-                    <tr
-                      key={r.id}
-                      onClick={() => toggleSeleccionRep(r.id)}
-                      className={`cursor-pointer transition-colors ${seleccionadosRep.has(r.id) ? 'bg-green-50' : 'hover:bg-gray-50'}`}
-                    >
+                    <tr key={r.id} onClick={() => toggleSeleccionRep(r.id)}
+                      className={`cursor-pointer transition-colors ${seleccionadosRep.has(r.id) ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
                       <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={seleccionadosRep.has(r.id)}
-                          onChange={() => toggleSeleccionRep(r.id)}
-                          className="w-4 h-4 text-green-600 rounded"
-                        />
+                        <input type="checkbox" checked={seleccionadosRep.has(r.id)} onChange={() => toggleSeleccionRep(r.id)} className="w-4 h-4 text-green-600 rounded" />
                       </td>
                       <td className="px-4 py-2.5 font-medium text-gray-900">{r.producto_nombre}</td>
                       <td className="px-4 py-2.5 text-gray-500 hidden md:table-cell">{r.tienda_nombre}</td>
@@ -514,7 +867,6 @@ export default function HistorialPage() {
               </table>
             )}
           </div>
-
           {!loadingRepublicables && republicablesFiltrados.length > 0 && (
             <p className="text-xs text-gray-400 text-right">
               {republicablesFiltrados.length} producto{republicablesFiltrados.length !== 1 ? 's' : ''} encontrados
@@ -534,7 +886,6 @@ export default function HistorialPage() {
               {tiendas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
           </div>
-
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-12">
