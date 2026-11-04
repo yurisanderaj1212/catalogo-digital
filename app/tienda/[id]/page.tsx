@@ -156,7 +156,7 @@ export default function TiendaPage() {
       if (!ptData || ptData.length === 0) { setProductos([]); setLoading(false); return; }
 
       const productosIds = ptData.map((pt: any) => pt.producto_id);
-      const { data: prodData } = await supabase.from('productos').select('*').in('id', productosIds).eq('activo', true).order('nombre');
+      const { data: prodData } = await supabase.from('productos').select('*').in('id', productosIds).eq('activo', true).eq('disponible', true).order('nombre');
 
       if (prodData && prodData.length > 0) {
         const ids = prodData.map((p: any) => p.id);
