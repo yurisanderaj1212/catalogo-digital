@@ -18,6 +18,22 @@ function fmt(n: number | null | undefined): string {
   }).format(n);
 }
 
+// Formatea precios CUP: entero con separador de miles (punto)
+function fmtCUP(n: number): string {
+  return new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(n));
+}
+
+// Retorna el precio CUP efectivo del producto (override tiene precedencia)
+function getPrecioCupEfectivo(p: Producto): number | null {
+  if (p.moneda !== 'USD') return null;
+  if (p.precio_cup_override != null) return p.precio_cup_override;
+  if (p.precio_cup != null) return p.precio_cup;
+  return null;
+}
+
 interface ProductoConImagenes extends Producto {
   imagenes: (ImagenProducto & { url_original?: string })[];
   categoria: Categoria | null;
@@ -404,32 +420,71 @@ export default function TiendaPage() {
                       <div className="p-2.5">
                         <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2 leading-tight">{producto.nombre}</h3>
                         {producto.descripcion && <p className="text-xs text-gray-600 mb-1.5 line-clamp-2">{producto.descripcion}</p>}
-                        {producto.tipo_venta === 'unidad_caja' && producto.precio_caja ? (
-                          <div>
-                            <p className="text-xs text-gray-500">{fmt(producto.precio)} {producto.moneda}/u</p>
-                            <p className="text-sm font-bold text-blue-600">Caja: ${fmt(producto.precio_caja)} <span className="text-xs">{producto.moneda}</span></p>
-                          </div>
-                        ) : producto.tipo_venta === 'carnico' ? (
-                          <div>
-                            {(producto.unidad_peso === 'kg' || producto.unidad_peso === 'ambos') && (
-                              <p className="text-sm font-bold text-blue-600">${fmt(producto.precio)} {producto.moneda}/kg</p>
-                            )}
-                            {(producto.unidad_peso === 'lb' || producto.unidad_peso === 'ambos') && producto.precio_por_libra && (
-                              <p className="text-sm font-bold text-blue-600">${fmt(producto.precio_por_libra)} {producto.moneda}/lb</p>
-                            )}
-                          </div>
-                        ) : producto.tipo_venta === 'paquete' ? (
-                          <div>
-                            {producto.unidades_por_caja && (
-                              <p className="text-xs text-gray-500">Paquete x{producto.unidades_por_caja}u</p>
-                            )}
-                            <p className="text-base font-bold text-blue-600">${fmt(producto.precio)} <span className="text-xs">{producto.moneda}</span></p>
-                          </div>
-                        ) : (
-                          <p className="text-base font-bold text-blue-600">
-                            ${fmt(producto.precio)} <span className="text-xs">{producto.moneda}</span>
-                          </p>
-                        )}
+                        {(() => {
+                          const pCUP = getPrecioCupEfectivo(producto);
+                          if (producto.tipo_venta === 'unidad_caja' && producto.precio_caja) {
+                            return (
+                              <div>
+                                {pCUP != null && (
+                                  <div className="mb-1">
+                                    <p className="text-xs text-green-700 font-semibold">{fmtCUP(pCUP)} CUP/u</p>
+                                    {producto.unidades_por_caja && (
+                                      <p className="text-sm font-bold text-green-700">Caja: {fmtCUP(pCUP * producto.unidades_por_caja)} CUP</p>
+                                    )}
+                                  </div>
+                                )}
+                                <p className="text-xs text-gray-500">{fmt(producto.precio)} {producto.moneda}/u</p>
+                                <p className="text-sm font-bold text-blue-600">Caja: ${fmt(producto.precio_caja)} <span className="text-xs">{producto.moneda}</span></p>
+                              </div>
+                            );
+                          }
+                          if (producto.tipo_venta === 'carnico') {
+                            return (
+                              <div>
+                                {pCUP != null && (
+                                  <div className="mb-1">
+                                    {(producto.unidad_peso === 'kg' || producto.unidad_peso === 'ambos') && (
+                                      <p className="text-sm font-bold text-green-700">{fmtCUP(pCUP)} CUP/kg</p>
+                                    )}
+                                    {(producto.unidad_peso === 'lb' || producto.unidad_peso === 'ambos') && (
+                                      <p className="text-sm font-bold text-green-700">{fmtCUP(Math.round(pCUP / 2.20462))} CUP/lb</p>
+                                    )}
+                                  </div>
+                                )}
+                                {(producto.unidad_peso === 'kg' || producto.unidad_peso === 'ambos') && (
+                                  <p className="text-sm font-bold text-blue-600">${fmt(producto.precio)} {producto.moneda}/kg</p>
+                                )}
+                                {(producto.unidad_peso === 'lb' || producto.unidad_peso === 'ambos') && producto.precio_por_libra && (
+                                  <p className="text-sm font-bold text-blue-600">${fmt(producto.precio_por_libra)} {producto.moneda}/lb</p>
+                                )}
+                              </div>
+                            );
+                          }
+                          if (producto.tipo_venta === 'paquete') {
+                            return (
+                              <div>
+                                {producto.unidades_por_caja && (
+                                  <p className="text-xs text-gray-500">Paquete x{producto.unidades_por_caja}u</p>
+                                )}
+                                {pCUP != null && (
+                                  <p className="text-sm font-bold text-green-700">{fmtCUP(pCUP)} CUP</p>
+                                )}
+                                <p className="text-base font-bold text-blue-600">${fmt(producto.precio)} <span className="text-xs">{producto.moneda}</span></p>
+                              </div>
+                            );
+                          }
+                          // unidad_sola y default
+                          return (
+                            <div>
+                              {pCUP != null && (
+                                <p className="text-sm font-bold text-green-700">{fmtCUP(pCUP)} CUP</p>
+                              )}
+                              <p className="text-base font-bold text-blue-600">
+                                ${fmt(producto.precio)} <span className="text-xs">{producto.moneda}</span>
+                              </p>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -500,34 +555,82 @@ export default function TiendaPage() {
                 <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                   <div className="flex items-baseline justify-between">
                     <div className="flex flex-col gap-1">
-                      {productoSeleccionado.tipo_venta === 'unidad_caja' && productoSeleccionado.precio_caja ? (
-                        <div>
-                          <p className="text-sm text-blue-500">Por unidad: ${fmt(productoSeleccionado.precio)} {productoSeleccionado.moneda}</p>
-                          <p className="text-xl font-bold text-blue-700">Caja ({productoSeleccionado.unidades_por_caja}u): ${fmt(productoSeleccionado.precio_caja)} <span className="text-sm">{productoSeleccionado.moneda}</span></p>
-                        </div>
-                      ) : productoSeleccionado.tipo_venta === 'carnico' ? (
-                        <div className="space-y-0.5">
-                          {(productoSeleccionado.unidad_peso === 'kg' || productoSeleccionado.unidad_peso === 'ambos') && (
-                            <p className="text-xl font-bold text-blue-700">${fmt(productoSeleccionado.precio)} <span className="text-sm font-medium">{productoSeleccionado.moneda}/kg</span></p>
-                          )}
-                          {(productoSeleccionado.unidad_peso === 'lb' || productoSeleccionado.unidad_peso === 'ambos') && productoSeleccionado.precio_por_libra && (
-                            <p className="text-xl font-bold text-blue-700">${fmt(productoSeleccionado.precio_por_libra)} <span className="text-sm font-medium">{productoSeleccionado.moneda}/lb</span></p>
-                          )}
-                        </div>
-                      ) : productoSeleccionado.tipo_venta === 'paquete' ? (
-                        <div>
-                          {productoSeleccionado.unidades_por_caja && (
-                            <p className="text-sm text-blue-500">Paquete x{productoSeleccionado.unidades_por_caja} unidades</p>
-                          )}
-                          <span className="text-2xl font-bold text-blue-700">${fmt(productoSeleccionado.precio)}</span>
-                          <span className="text-sm text-blue-600 font-medium ml-1">{productoSeleccionado.moneda}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-2xl font-bold text-blue-700">${fmt(productoSeleccionado.precio)}</span>
-                          <span className="text-sm text-blue-600 font-medium">{productoSeleccionado.moneda}</span>
-                        </div>
-                      )}
+                      {(() => {
+                        const p = productoSeleccionado;
+                        const pCUP = getPrecioCupEfectivo(p);
+                        if (p.tipo_venta === 'unidad_caja' && p.precio_caja) {
+                          return (
+                            <div className="space-y-1">
+                              {pCUP != null && (
+                                <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                                  <p className="text-sm text-green-600">Por unidad: {fmtCUP(pCUP)} CUP</p>
+                                  {p.unidades_por_caja && (
+                                    <p className="text-xl font-bold text-green-700">Caja ({p.unidades_por_caja}u): {fmtCUP(pCUP * p.unidades_por_caja)} CUP</p>
+                                  )}
+                                </div>
+                              )}
+                              <p className="text-sm text-blue-500">Por unidad: ${fmt(p.precio)} {p.moneda}</p>
+                              <p className="text-xl font-bold text-blue-700">Caja ({p.unidades_por_caja}u): ${fmt(p.precio_caja)} <span className="text-sm">{p.moneda}</span></p>
+                            </div>
+                          );
+                        }
+                        if (p.tipo_venta === 'carnico') {
+                          return (
+                            <div className="space-y-1">
+                              {pCUP != null && (
+                                <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-lg space-y-0.5">
+                                  {(p.unidad_peso === 'kg' || p.unidad_peso === 'ambos') && (
+                                    <p className="text-xl font-bold text-green-700">{fmtCUP(pCUP)} <span className="text-sm font-medium">CUP/kg</span></p>
+                                  )}
+                                  {(p.unidad_peso === 'lb' || p.unidad_peso === 'ambos') && (
+                                    <p className="text-xl font-bold text-green-700">{fmtCUP(Math.round(pCUP / 2.20462))} <span className="text-sm font-medium">CUP/lb</span></p>
+                                  )}
+                                </div>
+                              )}
+                              <div className="space-y-0.5">
+                                {(p.unidad_peso === 'kg' || p.unidad_peso === 'ambos') && (
+                                  <p className="text-xl font-bold text-blue-700">${fmt(p.precio)} <span className="text-sm font-medium">{p.moneda}/kg</span></p>
+                                )}
+                                {(p.unidad_peso === 'lb' || p.unidad_peso === 'ambos') && p.precio_por_libra && (
+                                  <p className="text-xl font-bold text-blue-700">${fmt(p.precio_por_libra)} <span className="text-sm font-medium">{p.moneda}/lb</span></p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (p.tipo_venta === 'paquete') {
+                          return (
+                            <div className="space-y-1">
+                              {p.unidades_por_caja && (
+                                <p className="text-sm text-blue-500">Paquete x{p.unidades_por_caja} unidades</p>
+                              )}
+                              {pCUP != null && (
+                                <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                                  <p className="text-xl font-bold text-green-700">{fmtCUP(pCUP)} <span className="text-sm font-medium">CUP</span></p>
+                                </div>
+                              )}
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-bold text-blue-700">${fmt(p.precio)}</span>
+                                <span className="text-sm text-blue-600 font-medium">{p.moneda}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        // unidad_sola y default
+                        return (
+                          <div className="space-y-1">
+                            {pCUP != null && (
+                              <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                                <p className="text-xl font-bold text-green-700">{fmtCUP(pCUP)} <span className="text-sm font-medium">CUP</span></p>
+                              </div>
+                            )}
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-2xl font-bold text-blue-700">${fmt(p.precio)}</span>
+                              <span className="text-sm text-blue-600 font-medium">{p.moneda}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${productoSeleccionado.disponible ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
