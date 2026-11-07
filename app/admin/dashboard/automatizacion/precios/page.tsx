@@ -51,12 +51,13 @@ interface ParseResult {
 
 // Parsea una línea y devuelve nombre, precio_usd y precio_cup
 // Formatos soportados:
-//   "Nombre | 1.50 USD | 830 CUP"  → precio_usd=1.50, precio_cup=830
+//   "Nombre | 1.50 | 1350"         → precio_usd=1.50, precio_cup=1350 (sin etiquetas, 1ro=USD 2do=CUP)
+//   "Nombre | 1.50 USD | 830 CUP"  → precio_usd=1.50, precio_cup=830 (con etiquetas)
 //   "Nombre | 1.50 USD"            → precio_usd=1.50, precio_cup=null
 //   "Nombre | 830 CUP"             → precio_usd=null, precio_cup=830
 //   "Nombre 1.50"                  → precio_usd=1.50, precio_cup=null (heredado)
 function parsearLinea(linea: string): { nombre: string; precio_usd: number | null; precio_cup: number | null } | null {
-  // Formato con pipe — puede tener USD, CUP o ambos
+  // Formato con pipe
   if (linea.includes('|')) {
     const partes = linea.split('|').map(s => s.trim());
     const nombre = partes[0];
@@ -65,6 +66,7 @@ function parsearLinea(linea: string): { nombre: string; precio_usd: number | nul
     let precio_usd: number | null = null;
     let precio_cup: number | null = null;
 
+    // Primero intentar con etiquetas USD/CUP explícitas
     for (let i = 1; i < partes.length; i++) {
       const matchUSD = partes[i].match(/^(\d+(?:[.,]\d+)?)\s*USD$/i);
       const matchCUP = partes[i].match(/^(\d+(?:[.,]\d+)?)\s*CUP$/i);
@@ -73,6 +75,21 @@ function parsearLinea(linea: string): { nombre: string; precio_usd: number | nul
     }
 
     if (precio_usd != null || precio_cup != null) return { nombre, precio_usd, precio_cup };
+
+    // Sin etiquetas — números puros separados por pipe: primero=USD, segundo=CUP
+    const numerosPartes = partes.slice(1).filter(p => /^\d+(?:[.,]\d+)?$/.test(p));
+    if (numerosPartes.length >= 2) {
+      return {
+        nombre,
+        precio_usd: parseFloat(numerosPartes[0].replace(',', '.')),
+        precio_cup: parseFloat(numerosPartes[1].replace(',', '.')),
+      };
+    }
+    if (numerosPartes.length === 1) {
+      // Un solo número sin etiqueta → USD
+      return { nombre, precio_usd: parseFloat(numerosPartes[0].replace(',', '.')), precio_cup: null };
+    }
+
     return null;
   }
 
@@ -565,13 +582,14 @@ export default function PreciosPage() {
         <p className="text-xs text-gray-500 mb-1">Formatos soportados:</p>
         <div className="flex flex-wrap gap-2 mb-3">
           <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto 150</span>
+          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 1.50 | 1350</span>
           <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 1.50 USD</span>
           <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 830 CUP</span>
           <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 1.50 USD | 830 CUP</span>
         </div>
-        <p className="text-xs text-gray-400 mb-3">El precio CUP se guarda como <strong>override fijo</strong> en el producto, tomando precedencia sobre la tasa global.</p>
+        <p className="text-xs text-gray-400 mb-3">Con dos números sin etiqueta: primero = USD, segundo = CUP. El precio CUP se guarda como <strong>override fijo</strong>.</p>
         <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6}
-          placeholder={"Arroz | 1.50 USD | 1350 CUP\nAceite | 200 USD\nPierna de cerdo | 3850 CUP"}
+          placeholder={"Arroz | 1.50 | 1350\nAceite | 200 USD\nPierna de cerdo | 3850 CUP\nPollo 450"}
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono resize-none" />
         <div className="flex justify-end mt-2">
           <button onClick={analizar} disabled={analizando || !texto.trim()}
