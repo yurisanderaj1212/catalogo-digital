@@ -36,15 +36,54 @@ async function llamarBot(path: string, body?: object) {
 
 interface ParseResult {
   texto_original: string;
-  precio_nuevo: number;
+  precio_nuevo: number | null;       // null si la línea solo trae CUP
+  precio_cup_nuevo: number | null;   // null si la línea no trae CUP
   // Múltiples candidatos por línea — el admin elige cuáles aplicar
   candidatos: {
     producto: Producto;
     confianza: number;
     precio_anterior: number;
+    precio_cup_anterior: number | null;
     aplicar: boolean;
     key: string; // unique key = linea_index + producto_id
   }[];
+}
+
+// Parsea una línea y devuelve nombre, precio_usd y precio_cup
+// Formatos soportados:
+//   "Nombre | 1.50 USD | 830 CUP"  → precio_usd=1.50, precio_cup=830
+//   "Nombre | 1.50 USD"            → precio_usd=1.50, precio_cup=null
+//   "Nombre | 830 CUP"             → precio_usd=null, precio_cup=830
+//   "Nombre 1.50"                  → precio_usd=1.50, precio_cup=null (heredado)
+function parsearLinea(linea: string): { nombre: string; precio_usd: number | null; precio_cup: number | null } | null {
+  // Formato con pipe — puede tener USD, CUP o ambos
+  if (linea.includes('|')) {
+    const partes = linea.split('|').map(s => s.trim());
+    const nombre = partes[0];
+    if (!nombre) return null;
+
+    let precio_usd: number | null = null;
+    let precio_cup: number | null = null;
+
+    for (let i = 1; i < partes.length; i++) {
+      const matchUSD = partes[i].match(/^(\d+(?:[.,]\d+)?)\s*USD$/i);
+      const matchCUP = partes[i].match(/^(\d+(?:[.,]\d+)?)\s*CUP$/i);
+      if (matchUSD) precio_usd = parseFloat(matchUSD[1].replace(',', '.'));
+      if (matchCUP) precio_cup = parseFloat(matchCUP[1].replace(',', '.'));
+    }
+
+    if (precio_usd != null || precio_cup != null) return { nombre, precio_usd, precio_cup };
+    return null;
+  }
+
+  // Formato heredado: "Nombre 1.50" o "Nombre - 150"
+  const match = linea.match(/^(.+?)[\s\-:]+(\d+(?:[.,]\d+)?)\s*(?:cup|usd|eur)?$/i);
+  if (!match) return null;
+  return {
+    nombre: match[1].trim(),
+    precio_usd: parseFloat(match[2].replace(',', '.')),
+    precio_cup: null,
+  };
 }
 
 // Devuelve candidatos: exactos primero, luego fuzzy si no hay exactos
@@ -54,45 +93,47 @@ function parsearTexto(texto: string, productos: Producto[]): ParseResult[] {
 
   for (let li = 0; li < lineas.length; li++) {
     const linea = lineas[li];
-    const match = linea.match(/^(.+?)[\s\-:]+(\d+(?:[.,]\d+)?)\s*(?:cup|usd|eur)?$/i);
-    if (!match) continue;
+    const parsed = parsearLinea(linea);
+    if (!parsed) continue;
 
-    const nombreBuscado = match[1].trim().toLowerCase();
-    const precioNuevo = parseFloat(match[2].replace(',', '.'));
+    const { nombre: nombreBuscado, precio_usd, precio_cup } = parsed;
 
-    // Primero: buscar coincidencias exactas (mismo nombre ignorando mayúsculas y tildes)
+    // Primero: buscar coincidencias exactas
     const exactos = productos.filter(p => normalizar(p.nombre) === normalizar(nombreBuscado));
 
     if (exactos.length > 0) {
-      // Hay 1 o más productos con nombre idéntico → mostrar todos auto-seleccionados
       resultados.push({
         texto_original: linea,
-        precio_nuevo: precioNuevo,
+        precio_nuevo: precio_usd,
+        precio_cup_nuevo: precio_cup,
         candidatos: exactos.map(p => ({
           producto: p,
           confianza: 100,
           precio_anterior: p.precio,
-          aplicar: true, // todos seleccionados por defecto
+          precio_cup_anterior: p.precio_cup_override ?? p.precio_cup ?? null,
+          aplicar: true,
           key: `${li}_${p.id}`,
         })),
       });
       continue;
     }
 
-    // No hay exactos: usar fuzzy match, mostrar solo el mejor candidato
+    // No hay exactos: fuzzy match
     const scores = productos
-      .map(p => ({ producto: p, score: calcularSimilitud(nombreBuscado, p.nombre.toLowerCase()) }))
+      .map(p => ({ producto: p, score: calcularSimilitud(nombreBuscado.toLowerCase(), p.nombre.toLowerCase()) }))
       .filter(x => x.score >= 0.5)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 1); // solo el mejor
+      .slice(0, 1);
 
     resultados.push({
       texto_original: linea,
-      precio_nuevo: precioNuevo,
+      precio_nuevo: precio_usd,
+      precio_cup_nuevo: precio_cup,
       candidatos: scores.map(({ producto, score }) => ({
         producto,
         confianza: Math.round(score * 100),
         precio_anterior: producto.precio,
+        precio_cup_anterior: producto.precio_cup_override ?? producto.precio_cup ?? null,
         aplicar: score >= 0.8,
         key: `${li}_${producto.id}`,
       })),
@@ -266,24 +307,44 @@ export default function PreciosPage() {
       r.candidatos.filter(c => c.aplicar && c.confianza >= 60).map(c => ({
         producto: c.producto,
         precio_nuevo: r.precio_nuevo,
+        precio_cup_nuevo: r.precio_cup_nuevo,
         precio_anterior: c.precio_anterior,
+        precio_cup_anterior: c.precio_cup_anterior,
       }))
     );
     if (aAplicar.length === 0) return;
     setAplicando(true);
     try {
       for (const item of aAplicar) {
-        await supabase.from('productos').update({ precio: item.precio_nuevo }).eq('id', item.producto.id);
-        await supabase.from('price_change_log').insert({
-          producto_id: item.producto.id,
-          tipo: 'precio',
-          valor_anterior: String(item.precio_anterior),
-          valor_nuevo: String(item.precio_nuevo),
-          estado: 'aprobado',
-          publicado_wa: false,
-        });
+        // Construir objeto de actualización solo con los campos que cambian
+        const updateData: Record<string, unknown> = {};
+        if (item.precio_nuevo != null) updateData.precio = item.precio_nuevo;
+        if (item.precio_cup_nuevo != null) updateData.precio_cup_override = item.precio_cup_nuevo;
+
+        if (Object.keys(updateData).length > 0) {
+          await supabase.from('productos').update(updateData).eq('id', item.producto.id);
+        }
+
+        // Registrar en el log solo si cambió el precio USD
+        if (item.precio_nuevo != null) {
+          await supabase.from('price_change_log').insert({
+            producto_id: item.producto.id,
+            tipo: 'precio',
+            valor_anterior: String(item.precio_anterior),
+            valor_nuevo: String(item.precio_nuevo),
+            estado: 'aprobado',
+            publicado_wa: false,
+          });
+        }
       }
-      mostrarMensaje(`Precios actualizados: ${aAplicar.length}`);
+      const soloUSD = aAplicar.filter(i => i.precio_nuevo != null && i.precio_cup_nuevo == null).length;
+      const soloCUP = aAplicar.filter(i => i.precio_nuevo == null && i.precio_cup_nuevo != null).length;
+      const ambos   = aAplicar.filter(i => i.precio_nuevo != null && i.precio_cup_nuevo != null).length;
+      const partes  = [];
+      if (soloUSD > 0) partes.push(`${soloUSD} USD`);
+      if (soloCUP > 0) partes.push(`${soloCUP} CUP`);
+      if (ambos > 0)   partes.push(`${ambos} USD+CUP`);
+      mostrarMensaje(`Precios actualizados: ${partes.join(', ')}`);
       setTexto(''); setResultados([]);
       await fetchProductos(); await fetchPendientes();
     } catch { mostrarMensaje('Error al aplicar cambios'); }
@@ -501,9 +562,16 @@ export default function PreciosPage() {
       {/* Parser de precios */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Actualizar precios desde texto</h2>
-        <p className="text-xs text-gray-500 mb-3">Pega una lista con formato: <span className="font-mono bg-gray-100 px-1 rounded">Producto 150</span> o <span className="font-mono bg-gray-100 px-1 rounded">Producto - 150 cup</span></p>
+        <p className="text-xs text-gray-500 mb-1">Formatos soportados:</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto 150</span>
+          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 1.50 USD</span>
+          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 830 CUP</span>
+          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">Producto | 1.50 USD | 830 CUP</span>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">El precio CUP se guarda como <strong>override fijo</strong> en el producto, tomando precedencia sobre la tasa global.</p>
         <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6}
-          placeholder={"Arroz 150\nAceite 200\nPierna de cerdo - 450"}
+          placeholder={"Arroz | 1.50 USD | 1350 CUP\nAceite | 200 USD\nPierna de cerdo | 3850 CUP"}
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono resize-none" />
         <div className="flex justify-end mt-2">
           <button onClick={analizar} disabled={analizando || !texto.trim()}
@@ -557,9 +625,22 @@ export default function PreciosPage() {
                             <p className="text-sm font-medium text-gray-900 truncate">{c.producto.nombre}</p>
                             <p className="text-xs text-gray-400">{c.producto.moneda}</p>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-xs text-gray-400 line-through">{c.precio_anterior.toLocaleString('es-CU')}</p>
-                            <p className="text-sm font-bold text-gray-900">{r.precio_nuevo.toLocaleString('es-CU')}</p>
+                          {/* Precios anteriores → nuevos */}
+                          <div className="text-right shrink-0 space-y-0.5">
+                            {r.precio_nuevo != null && (
+                              <div>
+                                <p className="text-xs text-gray-400 line-through">{c.precio_anterior.toLocaleString('es-CU')} USD</p>
+                                <p className="text-sm font-bold text-blue-700">{r.precio_nuevo.toLocaleString('es-CU')} USD</p>
+                              </div>
+                            )}
+                            {r.precio_cup_nuevo != null && (
+                              <div>
+                                {c.precio_cup_anterior != null && (
+                                  <p className="text-xs text-gray-400 line-through">{c.precio_cup_anterior.toLocaleString('es-CU')} CUP</p>
+                                )}
+                                <p className="text-sm font-bold text-green-700">{r.precio_cup_nuevo.toLocaleString('es-CU')} CUP</p>
+                              </div>
+                            )}
                           </div>
                           <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${cfg}`}>
                             {icon} {c.confianza}%
