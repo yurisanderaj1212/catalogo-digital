@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, Categoria, Tienda } from '@/lib/supabase';
-import { Plus, Edit, Trash2, Tag, Store } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag, Store, BellOff } from 'lucide-react';
 
 export default function CategoriasPage() {
   const [categorias, setCategorias] = useState<(Categoria & { tienda?: Tienda })[]>([]);
@@ -14,6 +14,7 @@ export default function CategoriasPage() {
     nombre: '',
     tienda_id: '',
     activa: true,
+    excluir_publicacion: false,
   });
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function CategoriasPage() {
 
   const abrirModalNuevo = () => {
     setCategoriaEditar(null);
-    setFormData({ nombre: '', tienda_id: '', activa: true });
+    setFormData({ nombre: '', tienda_id: '', activa: true, excluir_publicacion: false });
     setModalAbierto(true);
   };
 
@@ -55,6 +56,7 @@ export default function CategoriasPage() {
       nombre: categoria.nombre,
       tienda_id: categoria.tienda_id,
       activa: categoria.activa,
+      excluir_publicacion: categoria.excluir_publicacion ?? false,
     });
     setModalAbierto(true);
   };
@@ -95,6 +97,15 @@ export default function CategoriasPage() {
     }
   };
 
+  const toggleExcluirPublicacion = async (id: string, excluir: boolean) => {
+    try {
+      await supabase.from('categorias').update({ excluir_publicacion: !excluir }).eq('id', id);
+      fetchData();
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -119,28 +130,44 @@ export default function CategoriasPage() {
         </button>
       </div>
 
+      {/* Aviso si hay categorías excluidas */}
+      {categorias.some(c => c.excluir_publicacion) && (
+        <div className="flex items-start gap-3 mb-5 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          <BellOff className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+          <p>
+            <strong>{categorias.filter(c => c.excluir_publicacion).map(c => c.nombre).join(', ')}</strong>
+            {' '}— excluida{categorias.filter(c => c.excluir_publicacion).length > 1 ? 's' : ''} del ciclo de publicación del bot.
+            Los productos de {categorias.filter(c => c.excluir_publicacion).length > 1 ? 'estas categorías siguen' : 'esta categoría sigue'} visibles en el catálogo.
+          </p>
+        </div>
+      )}
+
       {categorias.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {categorias.map((categoria) => (
             <div
               key={categoria.id}
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+              className={`bg-white rounded-lg shadow-sm border p-4 hover:shadow-md transition-shadow ${
+                categoria.excluir_publicacion ? 'border-amber-200' : 'border-gray-200'
+              }`}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2 flex-1">
-                  <Tag className="w-5 h-5 text-purple-600" />
+                  <Tag className="w-5 h-5 text-purple-600 shrink-0" />
                   <h3 className="font-semibold text-gray-900">{categoria.nombre}</h3>
                 </div>
-                <button
-                  onClick={() => toggleActiva(categoria.id, categoria.activa)}
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    categoria.activa
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {categoria.activa ? 'Activa' : 'Inactiva'}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => toggleActiva(categoria.id, categoria.activa)}
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      categoria.activa
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {categoria.activa ? 'Activa' : 'Inactiva'}
+                  </button>
+                </div>
               </div>
 
               {categoria.tienda && (
@@ -150,7 +177,27 @@ export default function CategoriasPage() {
                 </div>
               )}
 
+              {/* Badge de exclusión de publicación */}
+              {categoria.excluir_publicacion && (
+                <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg">
+                  <BellOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="text-xs text-amber-700 font-medium">Excluida de publicaciones WA</span>
+                </div>
+              )}
+
               <div className="flex gap-2">
+                <button
+                  onClick={() => toggleExcluirPublicacion(categoria.id, categoria.excluir_publicacion ?? false)}
+                  className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs transition-colors ${
+                    categoria.excluir_publicacion
+                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                  title={categoria.excluir_publicacion ? 'Incluir en publicaciones' : 'Excluir de publicaciones'}
+                >
+                  <BellOff className="w-3.5 h-3.5" />
+                  {categoria.excluir_publicacion ? 'Incluir' : 'Excluir'}
+                </button>
                 <button
                   onClick={() => abrirModalEditar(categoria)}
                   className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded text-sm hover:bg-blue-100 transition-colors"
@@ -181,6 +228,7 @@ export default function CategoriasPage() {
         </div>
       )}
 
+      {/* Modal crear/editar */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setModalAbierto(false)}>
           <div className="bg-white rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
@@ -234,6 +282,24 @@ export default function CategoriasPage() {
                 <label htmlFor="activa" className="text-sm font-medium text-gray-700">
                   Categoría activa
                 </label>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="excluir_publicacion"
+                  checked={formData.excluir_publicacion}
+                  onChange={(e) => setFormData({ ...formData, excluir_publicacion: e.target.checked })}
+                  className="w-4 h-4 text-amber-600 rounded mt-0.5"
+                />
+                <div>
+                  <label htmlFor="excluir_publicacion" className="text-sm font-medium text-amber-800 cursor-pointer">
+                    Excluir del ciclo de publicación
+                  </label>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Los productos de esta categoría no se publicarán en WhatsApp pero seguirán visibles en el catálogo.
+                  </p>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">

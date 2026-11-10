@@ -39,6 +39,7 @@ export interface Categoria {
   nombre: string;
   tienda_id: string;
   activa: boolean;
+  excluir_publicacion: boolean;
 }
 
 export interface Producto {
