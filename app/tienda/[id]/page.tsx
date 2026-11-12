@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { supabase, Tienda, Producto, Categoria, ImagenProducto, GrupoWhatsApp } from '@/lib/supabase';
 import { formatearHora, formatearDias } from '@/lib/formatters';
-import { useParams, useRouter } from 'next/navigation';
-import { MapPin, Search, ArrowLeft, Phone, X, ChevronLeft, ChevronRight, Clock, Package } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { MapPin, Search, ArrowLeft, Phone, X, ChevronLeft, ChevronRight, Clock, Package, Link2, Check } from 'lucide-react';
 import ModalGruposWhatsApp from './components/ModalGruposWhatsApp';
 
 // Formatea precios: sin .00 para enteros, con decimales solo si son significativos
@@ -42,13 +42,13 @@ interface ProductoConImagenes extends Producto {
 export default function TiendaPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const tiendaId = params.id as string;
 
   const [tienda, setTienda] = useState<Tienda | null>(null);
   const [productos, setProductos] = useState<ProductoConImagenes[]>([]);
   const [gruposWA, setGruposWA] = useState<GrupoWhatsApp[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string | null>(null);
-  // Categoria visible durante scroll (solo afecta la pill activa, no filtra)
   const [categoriaVisible, setCategoriaVisible] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
@@ -59,6 +59,11 @@ export default function TiendaPage() {
   const [mostrarModalGrupos, setMostrarModalGrupos] = useState(false);
   const [busquedaExpandida, setBusquedaExpandida] = useState(false);
   const [imagenesHD, setImagenesHD] = useState<Record<string, boolean>>({});
+  // Producto cuyo enlace se acaba de copiar — para feedback visual
+  const [linkCopiado, setLinkCopiado] = useState<string | null>(null);
+  // IDs pendientes de abrir tras cargar productos (desde query params)
+  const productoIdPendiente = useRef<string | null>(searchParams.get('producto'));
+  const categoriaIdPendiente = useRef<string | null>(searchParams.get('categoria'));
 
   // Refs — usar HTMLDivElement para evitar conflicto de tipos con <header>
   const categoriasScrollRef = useRef<HTMLDivElement>(null);
@@ -78,6 +83,29 @@ export default function TiendaPage() {
   }, [productos]);
 
   useEffect(() => { fetchData(); }, [tiendaId]);
+
+  // Procesar query params (?producto= y ?categoria=) una vez que los productos cargaron
+  useEffect(() => {
+    if (loading || productos.length === 0) return;
+
+    // Abrir modal de producto si viene ?producto=
+    if (productoIdPendiente.current) {
+      const prod = productos.find(p => p.id === productoIdPendiente.current);
+      if (prod) {
+        abrirModal(prod);
+      }
+      productoIdPendiente.current = null;
+    }
+
+    // Preseleccionar categoría si viene ?categoria=
+    if (categoriaIdPendiente.current) {
+      const catExiste = productos.some(p => p.categoria_id === categoriaIdPendiente.current);
+      if (catExiste) {
+        setCategoriaSeleccionada(categoriaIdPendiente.current);
+      }
+      categoriaIdPendiente.current = null;
+    }
+  }, [loading, productos]);
 
   useEffect(() => {
     const onScroll = () => { setMostrarVolverArriba(window.scrollY > 400); };
@@ -207,6 +235,15 @@ export default function TiendaPage() {
   const seleccionarCategoria = (catId: string | null) => {
     setCategoriaSeleccionada(catId);
     setCategoriaVisible(null);
+    // Actualizar URL para que el link sea compartible
+    const url = new URL(window.location.href);
+    if (catId) {
+      url.searchParams.set('categoria', catId);
+    } else {
+      url.searchParams.delete('categoria');
+    }
+    url.searchParams.delete('producto'); // limpiar producto si había
+    window.history.replaceState(null, '', url.toString());
     setTimeout(() => {
       const key = catId ?? 'todas';
       const sec = seccionesRefs.current[key];
@@ -215,6 +252,27 @@ export default function TiendaPage() {
         window.scrollTo({ top: sec.getBoundingClientRect().top + window.scrollY - h - 8, behavior: 'smooth' });
       }
     }, 50);
+  };
+
+  const copiarEnlaceProducto = (e: React.MouseEvent, productoId: string) => {
+    e.stopPropagation(); // no abrir el modal
+    const url = new URL(window.location.href);
+    url.searchParams.set('producto', productoId);
+    url.searchParams.delete('categoria');
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      setLinkCopiado(productoId);
+      setTimeout(() => setLinkCopiado(null), 2000);
+    }).catch(() => {
+      // Fallback para navegadores sin clipboard API (HTTP)
+      const input = document.createElement('input');
+      input.value = url.toString();
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setLinkCopiado(productoId);
+      setTimeout(() => setLinkCopiado(null), 2000);
+    });
   };
 
   const abrirMaps = () => {
@@ -416,6 +474,17 @@ export default function TiendaPage() {
                             <span className="bg-blue-600 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md">Nuevo</span>
                           </div>
                         )}
+                        {/* Botón copiar enlace */}
+                        <button
+                          onClick={(e) => copiarEnlaceProducto(e, producto.id)}
+                          className="absolute top-2 right-2 p-1.5 bg-white bg-opacity-90 rounded-full shadow-sm hover:bg-opacity-100 transition-all"
+                          title="Copiar enlace del producto"
+                        >
+                          {linkCopiado === producto.id
+                            ? <Check className="w-3.5 h-3.5 text-green-600" />
+                            : <Link2 className="w-3.5 h-3.5 text-gray-600" />
+                          }
+                        </button>
                       </div>
                       <div className="p-2.5">
                         <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2 leading-tight">{producto.nombre}</h3>
